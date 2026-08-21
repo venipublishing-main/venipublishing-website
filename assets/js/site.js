@@ -163,4 +163,187 @@
     });
   }
 
+
+
+  const v09Dialog = document.querySelector('[data-v09-dialog]');
+  if (v09Dialog) {
+    const v09Profiles = Array.from(v09Dialog.querySelectorAll('[data-v09-profile]'));
+    const v09Close = v09Dialog.querySelector('[data-v09-close]');
+    let v09LastTrigger = null;
+
+    document.querySelectorAll('[data-v09-open]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const key = button.getAttribute('data-v09-open');
+        const target = v09Profiles.find((profile) => profile.getAttribute('data-v09-profile') === key);
+        if (!target) return;
+
+        v09Profiles.forEach((profile) => {
+          profile.hidden = profile !== target;
+        });
+
+        v09LastTrigger = button;
+        if (typeof v09Dialog.showModal === 'function') {
+          v09Dialog.showModal();
+        } else {
+          v09Dialog.setAttribute('open', '');
+        }
+        v09Close?.focus();
+      });
+    });
+
+    const closeV09Dialog = () => {
+      if (typeof v09Dialog.close === 'function') v09Dialog.close();
+      else v09Dialog.removeAttribute('open');
+      v09LastTrigger?.focus();
+    };
+
+    v09Close?.addEventListener('click', closeV09Dialog);
+
+    v09Dialog.addEventListener('click', (event) => {
+      if (event.target === v09Dialog) closeV09Dialog();
+    });
+
+    v09Dialog.addEventListener('close', () => {
+      v09Profiles.forEach((profile) => profile.hidden = true);
+    });
+  }
+
+
+
+  const bindV09Dialog = (options) => {
+    const dialog = document.querySelector(options.dialogSelector);
+    if (!dialog) return;
+
+    const profiles = Array.from(dialog.querySelectorAll(options.profileSelector));
+    const closeButton = dialog.querySelector(options.closeSelector);
+    let lastTrigger = null;
+
+    document.querySelectorAll(options.triggerSelector).forEach((button) => {
+      button.addEventListener('click', () => {
+        const key = button.getAttribute(options.triggerAttribute);
+        const target = profiles.find((profile) => profile.getAttribute(options.profileAttribute) === key);
+        if (!target) return;
+
+        profiles.forEach((profile) => {
+          profile.hidden = profile !== target;
+        });
+
+        lastTrigger = button;
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.setAttribute('open', '');
+        closeButton?.focus();
+      });
+    });
+
+    const closeDialog = () => {
+      if (typeof dialog.close === 'function') dialog.close();
+      else dialog.removeAttribute('open');
+      lastTrigger?.focus();
+    };
+
+    closeButton?.addEventListener('click', closeDialog);
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) closeDialog();
+    });
+    dialog.addEventListener('close', () => {
+      profiles.forEach((profile) => {
+        profile.hidden = true;
+      });
+    });
+  };
+
+  bindV09Dialog({
+    dialogSelector: '[data-v09-district-dialog]',
+    triggerSelector: '[data-v09-open-district]',
+    triggerAttribute: 'data-v09-open-district',
+    profileSelector: '[data-v09-district-profile]',
+    profileAttribute: 'data-v09-district-profile',
+    closeSelector: '[data-v09-district-close]'
+  });
+
+  bindV09Dialog({
+    dialogSelector: '[data-v09-system-dialog]',
+    triggerSelector: '[data-v09-open-system]',
+    triggerAttribute: 'data-v09-open-system',
+    profileSelector: '[data-v09-system-profile]',
+    profileAttribute: 'data-v09-system-profile',
+    closeSelector: '[data-v09-system-close]'
+  });
+
+
+
+  // Manual media carousels used by AI Geopolitic and Veni Faithful.
+  document.querySelectorAll('[data-media-carousel]').forEach((carousel) => {
+    const slides = Array.from(carousel.querySelectorAll('[data-media-slide]'));
+    const prev = carousel.querySelector('[data-media-prev]');
+    const next = carousel.querySelector('[data-media-next]');
+    const status = carousel.querySelector('[data-media-status]');
+    const indexWrap = carousel.querySelector('[data-media-index]');
+    if (!slides.length || !prev || !next) return;
+
+    let index = 0;
+    let touchStartX = null;
+    const indexButtons = [];
+
+    const render = (newIndex, moveFocus = false) => {
+      index = (newIndex + slides.length) % slides.length;
+      slides.forEach((slide, i) => {
+        const active = i === index;
+        slide.hidden = !active;
+        slide.setAttribute('aria-hidden', String(!active));
+        slide.classList.toggle('is-active', active);
+        slide.setAttribute('aria-label', `${i + 1} of ${slides.length}`);
+      });
+      if (status) status.textContent = `${index + 1} / ${slides.length}`;
+      indexButtons.forEach((button, i) => {
+        button.setAttribute('aria-current', String(i === index));
+      });
+      if (moveFocus) {
+        slides[index]?.focus?.({ preventScroll: true });
+      }
+    };
+
+    slides.forEach((slide) => slide.setAttribute('tabindex', '-1'));
+
+    if (indexWrap) {
+      slides.forEach((_, i) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'media-carousel-index-button';
+        button.textContent = String(i + 1);
+        button.setAttribute('aria-label', `Show item ${i + 1} of ${slides.length}`);
+        button.addEventListener('click', () => render(i));
+        indexWrap.appendChild(button);
+        indexButtons.push(button);
+      });
+    }
+
+    prev.addEventListener('click', () => render(index - 1));
+    next.addEventListener('click', () => render(index + 1));
+
+    carousel.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        render(index - 1);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        render(index + 1);
+      }
+    });
+
+    carousel.addEventListener('touchstart', (event) => {
+      touchStartX = event.changedTouches[0]?.clientX ?? null;
+    }, { passive: true });
+
+    carousel.addEventListener('touchend', (event) => {
+      if (touchStartX === null) return;
+      const endX = event.changedTouches[0]?.clientX ?? touchStartX;
+      const delta = endX - touchStartX;
+      if (Math.abs(delta) > 50) render(index + (delta < 0 ? 1 : -1));
+      touchStartX = null;
+    }, { passive: true });
+
+    render(0);
+  });
+
 })();
