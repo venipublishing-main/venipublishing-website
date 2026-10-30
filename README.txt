@@ -1,27 +1,22 @@
-AI GEOPOLITIC QA PATCH v1.4
+VENI PUBLISHING — v1.11 COLOUR FIX — LEFT JOIN MICRO PATCH
 
-Apply to the existing temporary preview repository.
+This patch changes exactly ONE SVG path in index.html.
 
-Included:
-- Actual six locked portraits.
-- Locked panel order: NORA, Diane Sterling, Johan Vosloo, Kai Patel, Thabo Mokoena, Amari Ndlovu.
-- Desktop 3x2 panel layout.
-- Horizontally swipeable panel on mobile.
-- Tap/click profile dialog for each panelist.
-- Ideological lens, role, character bio, recurring focus, typical question,
-  analytical strength, and potential blind spot.
-- 'How a briefing works' section.
-- Six real selected briefing slides supplied for the project.
-- Instagram active; YouTube clearly marked planned.
-- No POD/shop or fake purchase links.
-- AI Geopolitic-specific footer with a quiet link back to Veni Publishing.
-- Editorial separation statement.
-- Coordinates removed from the AI Geopolitic footer.
+It extends the left-hand start of orbit-front-c along the same ellipse so the
+front segment overlaps the rear ellipse cleanly.
 
-Files replaced:
-  ai-geopolitic/index.html
-  assets/css/site.css
-  assets/js/site.js
+Nothing else changes:
+- no CSS
+- no colour
+- no line weight
+- no icon placement
+- no other orbit geometry
 
-New assets:
-  assets/images/ai-selected-*.webp
+Use:
+1. Extract into:
+   E:\Dev\veni-websites\venipublishing-website
+
+2. Run:
+   .\fix-orbit-left-join.ps1
+
+3. Hard refresh localhost with Ctrl+F5.

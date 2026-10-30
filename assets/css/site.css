@@ -2521,7 +2521,7 @@ summary{cursor:pointer;font-weight:900}
   .media-carousel-index{justify-content:flex-start}
 }
 
-/* v1.10 - site-wide polish */
+/* v1.10 - site-wide polish
    Editorial interaction, navigation, accessibility and responsive refinement.
 */
 
@@ -2792,5 +2792,266 @@ p{
     animation-duration:.01ms !important;
     animation-iteration-count:1 !important;
     transition-duration:.01ms !important;
+  }
+}
+/* v1.11 - anchored 3D orbital hero
+   Rear orbit planes sit behind the Veni nucleus; selected near-side arcs
+   sweep in front of the core to create an atomic / orrery depth effect.
+*/
+
+.hero::after{
+  opacity:.15;
+  background:
+    radial-gradient(circle at 73% 42%,rgba(216,175,101,.12),transparent 25rem),
+    linear-gradient(125deg,transparent 42%,rgba(184,138,60,.07));
+}
+
+.ecosystem-wrap{
+  position:relative;
+  min-width:0;
+}
+
+.ecosystem-orbit{
+  width:min(100%,540px);
+  aspect-ratio:520 / 430;
+  min-height:0;
+  margin:0 auto;
+  position:relative;
+  display:grid;
+  place-items:center;
+  isolation:isolate;
+}
+
+.ecosystem-orbit::before,
+.ecosystem-orbit::after{
+  content:none;
+}
+
+/* SVG orbital planes ------------------------------------------------ */
+
+.orbit-svg{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+}
+
+.orbit-svg svg{
+  display:block;
+  width:100%;
+  height:100%;
+  overflow:visible;
+}
+
+.orbit-svg-rear{
+  z-index:1;
+}
+
+.orbit-svg-front{
+  z-index:3;
+}
+
+.orbit-path,
+.orbit-front{
+  fill:none;
+  stroke-linecap:round;
+  vector-effect:non-scaling-stroke;
+}
+
+.orbit-path,
+.orbit-front,
+.orbit-front-c{
+  stroke:rgba(224,178,99,.52);
+  stroke-width:1.25;
+  filter:drop-shadow(0 0 5px rgba(216,175,101,.07));
+}
+
+/* The v1.11 geometry is intentionally unchanged.
+   Rear ellipses and front-crossing segments use the exact same visual treatment,
+   so each orbit reads as one continuous bronze line. */
+.orbit-a,
+.orbit-b,
+.orbit-c{
+  stroke:rgba(224,178,99,.52);
+}
+
+/* These are the near-side pieces of two orbit planes.
+   They still render ABOVE the nucleus, but without any colour/weight shift. */
+
+/* Nucleus ----------------------------------------------------------- */
+
+.orbit-core{
+  position:relative;
+  z-index:2;
+  width:clamp(150px,34%,176px);
+  height:auto;
+  aspect-ratio:1;
+  border:1px solid rgba(226,181,96,.82);
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  overflow:visible;
+  background:
+    radial-gradient(circle at 46% 38%,rgba(26,82,71,.94),rgba(5,30,27,.98) 67%);
+  box-shadow:
+    0 0 0 11px rgba(184,138,60,.035),
+    0 0 0 29px rgba(184,138,60,.020),
+    0 0 45px rgba(197,147,67,.16),
+    inset 0 0 30px rgba(197,147,67,.05);
+}
+
+.orbit-core::before{
+  content:"";
+  position:absolute;
+  inset:-10px;
+  z-index:-1;
+  border:1px solid rgba(226,181,96,.14);
+  border-radius:50%;
+  box-shadow:0 0 30px rgba(197,147,67,.07);
+  pointer-events:none;
+}
+
+.orbit-core img{
+  position:relative;
+  z-index:1;
+  width:110px;
+  max-width:64%;
+}
+
+/* Platform planets -------------------------------------------------- */
+
+.orbit-item{
+  position:absolute;
+  z-index:4;
+  width:clamp(76px,18.5%,96px);
+  height:auto;
+  aspect-ratio:1;
+  transform:translate(-50%,-50%);
+  text-decoration:none;
+  color:inherit;
+  border-radius:50%;
+}
+
+/* Coordinates are tied to the same 520x430 system as the SVG.
+   This is what makes the icons actually sit ON their orbit paths. */
+.orbit-item.kids{
+  left:61.2%;
+  top:16.5%;
+}
+
+.orbit-item.ai{
+  left:15.2%;
+  top:47.5%;
+}
+
+.orbit-item.faith{
+  left:82.8%;
+  top:36%;
+  right:auto;
+}
+
+.orbit-item.mythos{
+  left:30.8%;
+  top:83.3%;
+  bottom:auto;
+}
+
+.orbit-item.buza{
+  left:71.9%;
+  top:78.1%;
+  right:auto;
+  bottom:auto;
+  font-family:Georgia,"Times New Roman",serif;
+  font-weight:800;
+  font-size:1.05rem;
+}
+
+.orbit-visual{
+  position:relative;
+  z-index:1;
+  width:100%;
+  height:100%;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  overflow:hidden;
+  background:#f6efdf;
+  border:3px solid #b88a3c;
+  box-shadow:
+    0 15px 32px rgba(0,0,0,.34),
+    0 0 12px rgba(216,175,101,.08);
+}
+
+.orbit-item.kids .orbit-visual{
+  box-shadow:
+    0 19px 40px rgba(0,0,0,.39),
+    0 0 18px rgba(216,175,101,.11);
+}
+
+.orbit-item.mythos .orbit-visual,
+.orbit-item.buza .orbit-visual{
+  box-shadow:
+    0 20px 42px rgba(0,0,0,.40),
+    0 0 15px rgba(216,175,101,.09);
+}
+
+.orbit-item:hover .orbit-visual,
+.orbit-item:focus-visible .orbit-visual{
+  border-color:#efc16e;
+  box-shadow:
+    0 21px 44px rgba(0,0,0,.42),
+    0 0 0 5px rgba(232,182,92,.12),
+    0 0 28px rgba(232,182,92,.28);
+  filter:brightness(1.045);
+}
+
+/* Keep hover labels readable around the new coordinates. */
+.orbit-item.kids .orbit-label{
+  top:calc(100% + 9px);
+}
+
+.orbit-caption{
+  margin:.2rem 0 0;
+}
+
+/* Responsive orbit geometry ---------------------------------------- */
+
+@media(max-width:820px){
+  .ecosystem-orbit{
+    width:min(100%,520px);
+    min-height:0;
+    margin-top:1rem;
+  }
+
+  .orbit-core{
+    width:clamp(142px,33%,166px);
+  }
+}
+
+@media(max-width:560px){
+  .ecosystem-orbit{
+    width:min(112%,500px);
+    min-height:0;
+    margin-left:50%;
+    transform:translateX(-50%) scale(.94);
+    transform-origin:center top;
+  }
+
+  .orbit-core{
+    width:148px;
+  }
+
+  .orbit-item{
+    width:78px;
+  }
+
+  .orbit-caption{
+    margin-top:-.35rem;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .orbit-front,
+  .orbit-path{
+    filter:none;
   }
 }
