@@ -347,3 +347,134 @@
   });
 
 })();
+/* AI archive v1 - recent episode viewer */
+(() => {
+  const viewer = document.querySelector('[data-ai-recent-viewer]');
+  if (!viewer) return;
+
+  const manifestUrl = viewer.getAttribute('data-manifest');
+  const choices = Array.from(document.querySelectorAll('[data-ai-episode-choice]'));
+  const image = viewer.querySelector('[data-ai-viewer-image]');
+  const episodeLabel = viewer.querySelector('[data-ai-viewer-episode]');
+  const title = viewer.querySelector('[data-ai-viewer-title]');
+  const meta = viewer.querySelector('[data-ai-viewer-meta]');
+  const slideLabel = viewer.querySelector('[data-ai-viewer-slide-label]');
+  const caption = viewer.querySelector('[data-ai-viewer-caption]');
+  const status = viewer.querySelector('[data-ai-viewer-status]');
+  const prev = viewer.querySelector('[data-ai-viewer-prev]');
+  const next = viewer.querySelector('[data-ai-viewer-next]');
+  const indexWrap = viewer.querySelector('[data-ai-viewer-index]');
+
+  let episodes = [];
+  let currentEpisode = null;
+  let slideIndex = 0;
+  let touchStartX = null;
+
+  const pad = (value) => String(value).padStart(2, '0');
+
+  const renderSlide = (newIndex) => {
+    if (!currentEpisode) return;
+    slideIndex = (newIndex + currentEpisode.slideCount) % currentEpisode.slideCount;
+    const slideNumber = slideIndex + 1;
+    const src = `${currentEpisode.path}${pad(slideNumber)}.${currentEpisode.extension}`;
+    image.src = src;
+    image.alt = `AI Geopolitic Episode ${currentEpisode.episode}, slide ${slideNumber} of ${currentEpisode.slideCount}: ${currentEpisode.title}`;
+    slideLabel.textContent = `Slide ${slideNumber} / ${currentEpisode.slideCount}`;
+    status.textContent = `${slideNumber} / ${currentEpisode.slideCount}`;
+    caption.textContent = currentEpisode.title;
+
+    Array.from(indexWrap.children).forEach((button, i) => {
+      button.setAttribute('aria-current', String(i === slideIndex));
+    });
+  };
+
+  const buildSlideIndex = () => {
+    indexWrap.innerHTML = '';
+    for (let i = 0; i < currentEpisode.slideCount; i += 1) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'media-carousel-index-button';
+      button.textContent = String(i + 1);
+      button.setAttribute('aria-label', `Show slide ${i + 1} of Episode ${currentEpisode.episode}`);
+      button.addEventListener('click', () => renderSlide(i));
+      indexWrap.appendChild(button);
+    }
+  };
+
+  const selectEpisode = (episodeNumber, updateUrl = true) => {
+    const episode = episodes.find((item) => String(item.episode) === String(episodeNumber));
+    if (!episode) return;
+
+    currentEpisode = episode;
+    slideIndex = 0;
+
+    episodeLabel.textContent = `Episode ${episode.episode}`;
+    title.textContent = episode.title;
+    meta.textContent = `${episode.dateLabel} - ${episode.format}`;
+
+    choices.forEach((button) => {
+      button.setAttribute('aria-current', String(button.getAttribute('data-ai-episode-choice') === String(episode.episode)));
+    });
+
+    buildSlideIndex();
+    renderSlide(0);
+
+    if (updateUrl && window.history?.replaceState) {
+      window.history.replaceState(null, '', `#ep${episode.episode}`);
+    }
+  };
+
+  choices.forEach((button) => {
+    button.addEventListener('click', () => {
+      selectEpisode(button.getAttribute('data-ai-episode-choice'));
+    });
+  });
+
+  prev?.addEventListener('click', () => renderSlide(slideIndex - 1));
+  next?.addEventListener('click', () => renderSlide(slideIndex + 1));
+
+  viewer.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      renderSlide(slideIndex - 1);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      renderSlide(slideIndex + 1);
+    }
+  });
+
+  viewer.addEventListener('touchstart', (event) => {
+    touchStartX = event.changedTouches[0]?.clientX ?? null;
+  }, { passive: true });
+
+  viewer.addEventListener('touchend', (event) => {
+    if (touchStartX === null) return;
+    const endX = event.changedTouches[0]?.clientX ?? touchStartX;
+    const delta = endX - touchStartX;
+    if (Math.abs(delta) > 50) renderSlide(slideIndex + (delta < 0 ? 1 : -1));
+    touchStartX = null;
+  }, { passive: true });
+
+  fetch(manifestUrl)
+    .then((response) => {
+      if (!response.ok) throw new Error(`Archive manifest returned ${response.status}`);
+      return response.json();
+    })
+    .then((data) => {
+      episodes = Array.isArray(data) ? data : [];
+      if (!episodes.length) throw new Error('Archive manifest is empty.');
+
+      const hashMatch = window.location.hash.match(/^#ep(\d+)$/i);
+      const requested = hashMatch?.[1];
+      const initial = episodes.some((item) => String(item.episode) === requested)
+        ? requested
+        : episodes[0].episode;
+
+      selectEpisode(initial, false);
+    })
+    .catch((error) => {
+      console.error('AI Geopolitic archive viewer:', error);
+      title.textContent = 'Recent briefings are temporarily unavailable.';
+      meta.textContent = 'Please use Instagram for the latest published briefing.';
+    });
+})();

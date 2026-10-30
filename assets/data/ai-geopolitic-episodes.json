@@ -1,0 +1,22 @@
+[
+    {
+        "episode":  130,
+        "date":  "2026-10-29",
+        "dateLabel":  "29 October 2026",
+        "title":  "South Africa\u0027s Gas-to-Power Plan Has Hit a Fuel-Security Wall",
+        "slideCount":  10,
+        "path":  "../assets/images/ai-geopolitic/episodes/ep130/",
+        "extension":  "webp",
+        "format":  "10-slide Daily Briefing"
+    },
+    {
+        "episode":  129,
+        "date":  "2026-10-28",
+        "dateLabel":  "28 October 2026",
+        "title":  "Ebola Has Turned Africa\u0027s Borders Into a Coordination Test",
+        "slideCount":  10,
+        "path":  "../assets/images/ai-geopolitic/episodes/ep129/",
+        "extension":  "webp",
+        "format":  "10-slide Daily Briefing"
+    }
+]
