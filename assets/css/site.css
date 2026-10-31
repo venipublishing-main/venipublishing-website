@@ -4463,3 +4463,307 @@ p{
     width:100%;
   }
 }
+/* Veni Mythos polish v1
+   Main platform: tighter vertical rhythm, preserve left-aligned editorial layout.
+   Version 0.9: centered content hierarchy inside its dossier-style sections.
+*/
+
+/* MAIN MYTHOS PAGE */
+
+.theme-mythos.mythos-platform .mythos-v16-hero{
+  padding-top:4.5rem;
+  padding-bottom:4.25rem;
+}
+
+.theme-mythos.mythos-platform .mythos-v16-hero-grid{
+  min-height:520px;
+}
+
+.theme-mythos.mythos-platform .section{
+  padding-top:4.2rem;
+  padding-bottom:4.2rem;
+}
+
+.theme-mythos.mythos-platform .mythos-paper{
+  padding-top:4rem;
+  padding-bottom:4rem;
+}
+
+.theme-mythos.mythos-platform .mythos-feature{
+  padding-top:4.1rem;
+  padding-bottom:4.15rem;
+}
+
+.theme-mythos.mythos-platform .mythos-section-head{
+  margin-bottom:2rem;
+}
+
+.theme-mythos.mythos-platform .mythos-feature-grid{
+  gap:2.7rem;
+}
+
+.theme-mythos.mythos-platform .mythos-shelf{
+  margin-top:2rem;
+}
+
+.theme-mythos.mythos-platform .mythos-about-grid{
+  gap:3rem;
+}
+
+.theme-mythos.mythos-platform .mythos-feature-copy{
+  align-self:center;
+}
+
+/* VERSION 0.9 */
+
+.theme-mythos.version09 .v09-hero-copy{
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-hero-copy .lead{
+  margin-left:auto;
+  margin-right:auto;
+}
+
+.theme-mythos.version09 .v09-hero-copy .actions{
+  justify-content:center;
+}
+
+.theme-mythos.version09 .v09-statusbar{
+  justify-content:center;
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-section{
+  padding-top:4.15rem;
+  padding-bottom:4.15rem;
+}
+
+.theme-mythos.version09 .v09-section-head{
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-section-head>div{
+  margin-inline:auto;
+}
+
+.theme-mythos.version09 .v09-section-head p{
+  margin-left:auto;
+  margin-right:auto;
+}
+
+.theme-mythos.version09 .v09-premise-grid>div:first-child{
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-premise-grid>div:first-child p{
+  margin-left:auto;
+  margin-right:auto;
+}
+
+.theme-mythos.version09 .v09-principles article{
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-principles article span,
+.theme-mythos.version09 .v09-principles article strong,
+.theme-mythos.version09 .v09-principles article p{
+  margin-left:auto;
+  margin-right:auto;
+}
+
+/* Personnel cards */
+.theme-mythos.version09 .v09-person-open{
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-person-copy{
+  align-items:center;
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-person-copy small,
+.theme-mythos.version09 .v09-person-copy strong,
+.theme-mythos.version09 .v09-person-copy em,
+.theme-mythos.version09 .v09-person-copy span,
+.theme-mythos.version09 .v09-person-copy b{
+  margin-left:auto;
+  margin-right:auto;
+}
+
+/* Locality cards */
+.theme-mythos.version09 .v09-info-open{
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-info-copy{
+  align-items:center;
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-info-copy small,
+.theme-mythos.version09 .v09-info-copy strong,
+.theme-mythos.version09 .v09-info-copy span,
+.theme-mythos.version09 .v09-info-copy b{
+  margin-left:auto;
+  margin-right:auto;
+}
+
+/* Generic systems/info blocks */
+.theme-mythos.version09 .v09-systems .v09-info-card,
+.theme-mythos.version09 .v09-systems article{
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-systems .v09-info-card>*,
+.theme-mythos.version09 .v09-systems article>*{
+  margin-left:auto;
+  margin-right:auto;
+}
+
+.theme-mythos.version09 .v09-swipe-note{
+  text-align:center;
+  margin-left:auto;
+  margin-right:auto;
+}
+
+/* Long modal/dossier prose stays readable */
+.theme-mythos.version09 [role="dialog"] p,
+.theme-mythos.version09 .v09-modal p,
+.theme-mythos.version09 .v09-dossier-modal p{
+  text-align:left;
+}
+
+.theme-mythos.version09 .v09-hero{
+  padding-top:4.3rem;
+  padding-bottom:4.1rem;
+}
+
+.theme-mythos.version09 .v09-premise-grid,
+.theme-mythos.version09 .v09-personnel-grid,
+.theme-mythos.version09 .v09-info-grid{
+  margin-top:2rem;
+}
+
+@media(max-width:760px){
+  .theme-mythos.mythos-platform .mythos-v16-hero{
+    padding-top:3.5rem;
+    padding-bottom:3.4rem;
+  }
+
+  .theme-mythos.mythos-platform .section,
+  .theme-mythos.version09 .v09-section{
+    padding-top:3.3rem;
+    padding-bottom:3.3rem;
+  }
+
+  .theme-mythos.version09 .v09-hero{
+    padding-top:3.4rem;
+    padding-bottom:3.2rem;
+  }
+}
+/* Version 0.9 interaction cues v1
+   Removes explanatory interaction copy and lets the UI communicate clickability.
+*/
+
+/* Heading rows no longer reserve space for instruction notes. */
+.theme-mythos.version09 .v09-character-head{
+  display:block;
+  text-align:center;
+}
+
+.theme-mythos.version09 .v09-character-head>div{
+  margin-inline:auto;
+}
+
+/* Cards behave visibly like controls. */
+.theme-mythos.version09 .v09-person-open,
+.theme-mythos.version09 .v09-info-open{
+  cursor:pointer;
+  transition:
+    transform .18s ease,
+    box-shadow .18s ease,
+    border-color .18s ease,
+    background .18s ease;
+}
+
+.theme-mythos.version09 .v09-person-card:hover .v09-person-open,
+.theme-mythos.version09 .v09-person-open:focus-visible,
+.theme-mythos.version09 .v09-info-card:hover .v09-info-open,
+.theme-mythos.version09 .v09-info-open:focus-visible{
+  transform:translateY(-3px);
+  box-shadow:0 14px 30px rgba(0,0,0,.24);
+}
+
+/* Image-level cue: compact, persistent but unobtrusive. */
+.theme-mythos.version09 .v09-person-image,
+.theme-mythos.version09 .v09-info-thumb{
+  position:relative;
+  overflow:hidden;
+}
+
+.theme-mythos.version09 .v09-person-image::after,
+.theme-mythos.version09 .v09-info-thumb::after{
+  content:"VIEW DOSSIER";
+  position:absolute;
+  left:50%;
+  bottom:.65rem;
+  transform:translateX(-50%);
+  z-index:2;
+  width:max-content;
+  max-width:calc(100% - 1rem);
+  padding:.34rem .58rem;
+  border:1px solid rgba(214,165,82,.48);
+  border-radius:999px;
+  background:rgba(5,17,18,.82);
+  color:#ead7b4;
+  font-size:.56rem;
+  font-weight:900;
+  letter-spacing:.11em;
+  line-height:1;
+  text-transform:uppercase;
+  opacity:.82;
+  backdrop-filter:blur(4px);
+  transition:opacity .18s ease,transform .18s ease,background .18s ease;
+}
+
+.theme-mythos.version09 .v09-person-card:hover .v09-person-image::after,
+.theme-mythos.version09 .v09-person-open:focus-visible .v09-person-image::after,
+.theme-mythos.version09 .v09-info-card:hover .v09-info-thumb::after,
+.theme-mythos.version09 .v09-info-open:focus-visible .v09-info-thumb::after{
+  opacity:1;
+  background:rgba(5,17,18,.94);
+  transform:translateX(-50%) translateY(-2px);
+}
+
+/* Existing text links inside cards can now be quieter because the card itself
+   already communicates the action. */
+.theme-mythos.version09 .v09-person-copy b,
+.theme-mythos.version09 .v09-info-copy b{
+  opacity:.72;
+  font-size:.62rem;
+}
+
+/* Generic system dossier controls, if present, get the same affordance. */
+.theme-mythos.version09 .v09-systems button,
+.theme-mythos.version09 .v09-systems [data-v09-open-system]{
+  cursor:pointer;
+  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
+}
+
+.theme-mythos.version09 .v09-systems button:hover,
+.theme-mythos.version09 .v09-systems button:focus-visible,
+.theme-mythos.version09 .v09-systems [data-v09-open-system]:hover,
+.theme-mythos.version09 .v09-systems [data-v09-open-system]:focus-visible{
+  transform:translateY(-2px);
+  box-shadow:0 12px 26px rgba(0,0,0,.20);
+}
+
+@media(max-width:760px){
+  .theme-mythos.version09 .v09-person-image::after,
+  .theme-mythos.version09 .v09-info-thumb::after{
+    bottom:.5rem;
+    font-size:.52rem;
+    padding:.32rem .52rem;
+  }
+}
