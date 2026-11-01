@@ -54,3 +54,169 @@
   .account-tool-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.42rem}
   .account-tool-nav a{text-align:center;padding:.52rem .4rem}
 }
+/* VENI ACCOUNT POLISH V1 START */
+
+/* Tighter page rhythm */
+.account-page-hero{
+  padding:3.15rem 0 2.15rem;
+  text-align:center;
+}
+.account-page-hero .container{
+  max-width:920px;
+}
+.account-page-hero .eyebrow{
+  margin-bottom:.45rem;
+}
+.account-page-hero h1{
+  margin-top:0;
+  margin-bottom:.55rem;
+}
+.account-page-hero .lead{
+  max-width:720px;
+  margin:.45rem auto 0;
+}
+.account-tool-nav{
+  justify-content:center;
+  margin-top:1rem;
+}
+.account-app>.section{
+  padding-top:2.35rem;
+  padding-bottom:2.75rem;
+}
+
+/* Home / hub composition */
+.account-page-grid{
+  gap:1.25rem;
+}
+.account-page-grid>.account-panel{
+  text-align:center;
+}
+.account-page-grid>.account-panel .actions,
+.account-page-grid>.account-panel .account-inline-links{
+  justify-content:center;
+}
+.account-page-grid .account-tool-grid{
+  margin-top:.75rem;
+}
+.account-page-grid .account-tool-card{
+  min-height:104px;
+  padding:.9rem;
+  text-align:center;
+}
+.account-page-grid .account-note{
+  margin-top:.8rem !important;
+  text-align:left;
+}
+
+/* General card rhythm */
+.account-panel{
+  padding:1.3rem;
+}
+.account-panel h2{
+  margin-top:0;
+  margin-bottom:.45rem;
+}
+.account-panel p{
+  margin-top:.35rem;
+}
+.account-divider{
+  margin:1rem 0;
+}
+.account-inline-links{
+  justify-content:center;
+  margin-top:.8rem;
+}
+
+/* Auth pages: center the surrounding message, keep forms readable */
+.narrow>.account-panel{
+  max-width:680px;
+  margin-left:auto;
+  margin-right:auto;
+}
+.narrow>.account-panel>h2,
+.narrow>.account-panel>p{
+  text-align:center;
+}
+.narrow>.account-panel>.account-inline-links{
+  justify-content:center;
+}
+.narrow>.account-panel>.account-form{
+  text-align:left;
+}
+.narrow>.account-panel>.account-form>.btn{
+  justify-self:center;
+  margin-top:.15rem;
+}
+
+/* Library: keep content compact and centered when empty */
+.account-library-list{
+  gap:.8rem;
+  margin-top:.8rem;
+}
+.account-library-card{
+  padding:.95rem;
+}
+[data-library-empty]{
+  max-width:680px;
+  margin:.9rem auto 0;
+  text-align:center;
+  border-left:0;
+  border-top:3px solid #b88a3c;
+}
+
+/* Settings stays editorial / left aligned, just tighter */
+.account-settings-stack{
+  gap:.8rem;
+}
+.account-settings-card{
+  padding:1.15rem 1.25rem;
+}
+.account-settings-card h2{
+  margin-top:0;
+  margin-bottom:.3rem;
+}
+.account-settings-card .eyebrow{
+  margin-bottom:.25rem;
+}
+.account-settings-card p{
+  margin-top:.35rem;
+  margin-bottom:.75rem;
+}
+.account-data-summary{
+  gap:.55rem;
+  margin-top:.75rem;
+}
+.account-data-summary div{
+  padding:.7rem;
+}
+.account-danger-list{
+  margin-top:.55rem;
+  margin-bottom:.8rem;
+}
+
+/* Compact status messaging */
+.account-status{
+  max-width:760px;
+  margin:.75rem auto 1rem;
+  text-align:center;
+}
+
+/* Mobile rhythm */
+@media(max-width:560px){
+  .account-page-hero{
+    padding:2.35rem 0 1.75rem;
+  }
+  .account-tool-nav{
+    margin-top:.8rem;
+  }
+  .account-app>.section{
+    padding-top:1.75rem;
+    padding-bottom:2.15rem;
+  }
+  .account-panel,
+  .account-settings-card{
+    padding:1rem;
+  }
+}
+
+/* VENI ACCOUNT POLISH V1 END */
