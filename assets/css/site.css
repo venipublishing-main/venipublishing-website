@@ -5213,3 +5213,369 @@ p{
     padding:.5rem .8rem;
   }
 }
+/* VENI ACCOUNT NAV STATUS V1 START */
+.nav-account-menu{
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  flex:0 0 auto;
+}
+.nav-account{
+  appearance:none;
+  border:0;
+  padding:0;
+  margin:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  display:inline-flex;
+  align-items:center;
+  gap:.42rem;
+  cursor:pointer;
+  text-decoration:none;
+  font-size:.85rem;
+  font-weight:800;
+  letter-spacing:.04em;
+  white-space:nowrap;
+}
+.nav-account:hover,
+.nav-account:focus-visible{
+  color:inherit;
+  opacity:.82;
+}
+.nav-account-dot{
+  width:.46rem;
+  height:.46rem;
+  border:1px solid currentColor;
+  border-radius:50%;
+  background:transparent;
+  opacity:.72;
+  flex:0 0 auto;
+}
+.nav-account[data-signed-in="true"]{
+  color:inherit;
+}
+.nav-account[data-signed-in="true"] .nav-account-dot{
+  background:currentColor;
+  border-color:currentColor;
+  opacity:1;
+}
+.nav-account-chevron{
+  width:.42rem;
+  height:.42rem;
+  border-right:1.5px solid currentColor;
+  border-bottom:1.5px solid currentColor;
+  opacity:.72;
+  transform:translateY(-2px) rotate(45deg);
+  flex:0 0 auto;
+  font-size:0;
+  line-height:0;
+}
+.nav-account-popover{
+  position:absolute;
+  top:calc(100% + .75rem);
+  right:0;
+  z-index:140;
+  min-width:180px;
+  padding:.4rem;
+  border:1px solid rgba(184,138,60,.5);
+  border-radius:.45rem;
+  background:#0b2b26;
+  color:#fffdf8;
+  box-shadow:0 16px 34px rgba(0,0,0,.28);
+}
+.nav-account-popover[hidden]{
+  display:none;
+}
+.nav-account-popover a{
+  display:block;
+  padding:.68rem .75rem;
+  border-radius:.3rem;
+  color:inherit;
+  text-decoration:none;
+  font-size:.78rem;
+  font-weight:800;
+  letter-spacing:.02em;
+}
+.nav-account-popover a:hover,
+.nav-account-popover a:focus-visible{
+  background:rgba(184,138,60,.18);
+  color:#f0cf91;
+}
+.nav-account-popover a[data-account-signout]{
+  margin-top:.25rem;
+  border-top:1px solid rgba(255,255,255,.12);
+  border-radius:0 0 .3rem .3rem;
+}
+.mobile-menu .nav-account-menu{
+  display:block;
+  width:100%;
+}
+.mobile-menu .nav-account{
+  width:100%;
+  justify-content:flex-start;
+  padding:1rem 1.15rem;
+  border-bottom:1px solid rgba(255,255,255,.1);
+}
+.mobile-menu .nav-account-popover{
+  position:static;
+  min-width:0;
+  border:0;
+  border-bottom:1px solid rgba(255,255,255,.1);
+  border-radius:0;
+  box-shadow:none;
+  background:#071f1c;
+  padding:.25rem .85rem .65rem;
+}
+.mobile-menu .nav-account-popover a{
+  padding:.72rem 1rem;
+  border-bottom:0;
+  font-size:.78rem;
+}
+@media (min-width:821px) and (max-width:1050px){
+  .desktop-nav{gap:1rem}
+  .nav-account{font-size:.74rem}
+}
+/* VENI ACCOUNT NAV STATUS V1 END */
+/* VENI ACCOUNT DROPDOWN THEME V4 START */
+
+/* Shared Account-menu palette. Individual platforms override these variables. */
+.site-header{
+  --account-menu-bg:#092823;
+  --account-menu-text:#fffdf8;
+  --account-menu-border:rgba(184,138,60,.42);
+  --account-menu-hover:rgba(184,138,60,.18);
+  --account-menu-hover-text:#fffdf8;
+  --account-menu-divider:rgba(255,255,255,.12);
+}
+
+/* AI Geopolitic */
+.theme-ai .site-header,
+.ai-header{
+  --account-menu-bg:#091d1f;
+  --account-menu-text:#b6cfd1;
+  --account-menu-border:rgba(94,179,195,.28);
+  --account-menu-hover:rgba(94,179,195,.14);
+  --account-menu-hover-text:#ffffff;
+  --account-menu-divider:rgba(182,207,209,.16);
+}
+
+/* Veni Faithful */
+.theme-faithful .site-header,
+.faithful-header{
+  --account-menu-bg:#f6ead2;
+  --account-menu-text:#4d3422;
+  --account-menu-border:#a9855f;
+  --account-menu-hover:#f3e2c3;
+  --account-menu-hover-text:#2f2016;
+  --account-menu-divider:rgba(110,72,33,.18);
+}
+
+/* Veni Mythos + Version 0.9 */
+.theme-mythos .site-header,
+.mythos-header,
+.v09-header{
+  --account-menu-bg:#0b1513;
+  --account-menu-text:#f1e6d2;
+  --account-menu-border:#806338;
+  --account-menu-hover:rgba(128,99,56,.22);
+  --account-menu-hover-text:#fff4df;
+  --account-menu-divider:rgba(241,230,210,.14);
+}
+
+/* BUZA */
+.theme-buza .site-header,
+.buza-header{
+  --account-menu-bg:#0d0d1b;
+  --account-menu-text:#d8d6ef;
+  --account-menu-border:rgba(132,111,207,.38);
+  --account-menu-hover:rgba(132,111,207,.18);
+  --account-menu-hover-text:#ffffff;
+  --account-menu-divider:rgba(216,214,239,.14);
+}
+
+.nav-account-popover{
+  display:block;
+  min-width:190px;
+  padding:.42rem;
+  background:var(--account-menu-bg);
+  color:var(--account-menu-text);
+  border-color:var(--account-menu-border);
+}
+
+.nav-account-popover[hidden]{
+  display:none;
+}
+
+/* Shield dropdown items from platform-specific .desktop-nav a rules. */
+.desktop-nav .nav-account-popover a,
+.mobile-menu .nav-account-popover a,
+.theme-faithful .faithful-header .desktop-nav .nav-account-popover a,
+.theme-faithful .faithful-header .mobile-menu .nav-account-popover a{
+  position:static;
+  display:block;
+  width:100%;
+  min-height:0;
+  margin:0;
+  padding:.68rem .75rem;
+  border:0;
+  border-radius:.3rem;
+  background:transparent;
+  box-shadow:none;
+  color:var(--account-menu-text);
+  opacity:1;
+  text-decoration:none;
+  text-align:left;
+  font-size:.78rem;
+  font-weight:800;
+  letter-spacing:.02em;
+  line-height:1.35;
+}
+
+.desktop-nav .nav-account-popover a::after,
+.mobile-menu .nav-account-popover a::after,
+.theme-faithful .faithful-header .desktop-nav .nav-account-popover a::after,
+.theme-faithful .faithful-header .mobile-menu .nav-account-popover a::after{
+  content:none !important;
+  display:none !important;
+}
+
+.desktop-nav .nav-account-popover a:hover,
+.desktop-nav .nav-account-popover a:focus-visible,
+.mobile-menu .nav-account-popover a:hover,
+.mobile-menu .nav-account-popover a:focus-visible,
+.theme-faithful .faithful-header .desktop-nav .nav-account-popover a:hover,
+.theme-faithful .faithful-header .desktop-nav .nav-account-popover a:focus-visible{
+  background:var(--account-menu-hover);
+  color:var(--account-menu-hover-text);
+  border:0;
+  box-shadow:none;
+}
+
+.nav-account-popover a[data-account-signout]{
+  margin-top:.25rem;
+  padding-top:.72rem;
+  border-top:1px solid var(--account-menu-divider);
+}
+
+/* Faithful: keep Instagram accented, but no longer render it as a bordered CTA. */
+.theme-faithful .faithful-header .desktop-nav > a:nth-child(4){
+  min-height:40px;
+  padding:.35rem 0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  color:#6e4821;
+  font-weight:850;
+}
+
+.theme-faithful .faithful-header .desktop-nav > a:nth-child(4):hover,
+.theme-faithful .faithful-header .desktop-nav > a:nth-child(4):focus-visible{
+  color:#2f2016;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+}
+
+/* Faithful Account wrapper must remain a single flex item in the header. */
+.theme-faithful .faithful-header .desktop-nav > .nav-account-menu{
+  display:inline-flex;
+  align-items:center;
+  flex:0 0 auto;
+}
+
+/* VENI ACCOUNT DROPDOWN THEME V4 END */
+/* VENI FAITHFUL HEADER STANDARDIZE V6 START */
+
+/* Restore the original Faithful cream/brown banner. */
+.theme-faithful .faithful-header{
+  background:#f6ead2;
+  color:#4d3422;
+}
+
+/* Brand text stays in the Faithful brown palette. */
+.theme-faithful .faithful-brand .brand-copy strong{
+  color:#382519;
+}
+.theme-faithful .faithful-brand .brand-copy small{
+  color:#6c5c50;
+}
+
+/* All top-level Faithful nav items behave identically. */
+.theme-faithful .faithful-header .desktop-nav > a,
+.theme-faithful .faithful-header .desktop-nav > .nav-account-menu > .nav-account{
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  min-height:40px;
+  padding:.35rem 0;
+  margin:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  color:#4d3422;
+  opacity:1;
+  text-decoration:none;
+  font-size:.85rem;
+  font-weight:800;
+  letter-spacing:.04em;
+  transition:color .18s ease,opacity .18s ease;
+}
+
+/* Same hover/focus behaviour for every header item, including Instagram and Account. */
+.theme-faithful .faithful-header .desktop-nav > a:hover,
+.theme-faithful .faithful-header .desktop-nav > a:focus-visible,
+.theme-faithful .faithful-header .desktop-nav > .nav-account-menu > .nav-account:hover,
+.theme-faithful .faithful-header .desktop-nav > .nav-account-menu > .nav-account:focus-visible{
+  color:#9a682d;
+  opacity:1;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+}
+
+/* Remove the old special underline / CTA treatments from all Faithful items. */
+.theme-faithful .faithful-header .desktop-nav > a::after{
+  content:none !important;
+  display:none !important;
+}
+
+/* Keep Account dropdown in the Faithful cream/brown palette. */
+.theme-faithful .site-header,
+.faithful-header{
+  --account-menu-bg:#f6ead2;
+  --account-menu-text:#4d3422;
+  --account-menu-border:#a9855f;
+  --account-menu-hover:#f3e2c3;
+  --account-menu-hover-text:#2f2016;
+  --account-menu-divider:rgba(110,72,33,.18);
+}
+
+/* Mobile header remains Faithful cream with the same brown text logic. */
+.theme-faithful .faithful-header .mobile-menu{
+  background:#f6ead2;
+  border-top-color:rgba(169,133,95,.45);
+}
+
+.theme-faithful .faithful-header .mobile-menu > .container > a,
+.theme-faithful .faithful-header .mobile-menu > .container > .nav-account-menu > .nav-account{
+  color:#4d3422;
+  border:0;
+  border-bottom:1px solid rgba(110,72,33,.12);
+  border-radius:0;
+  margin:0;
+  background:transparent;
+  box-shadow:none;
+}
+
+.theme-faithful .faithful-header .mobile-menu > .container > a:hover,
+.theme-faithful .faithful-header .mobile-menu > .container > a:focus-visible,
+.theme-faithful .faithful-header .mobile-menu > .container > .nav-account-menu > .nav-account:hover,
+.theme-faithful .faithful-header .mobile-menu > .container > .nav-account-menu > .nav-account:focus-visible{
+  color:#9a682d;
+  background:transparent;
+}
+
+/* VENI FAITHFUL HEADER STANDARDIZE V6 END */

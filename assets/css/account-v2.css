@@ -220,3 +220,32 @@
 }
 
 /* VENI ACCOUNT POLISH V1 END */
+/* VENI ACCOUNT AUTH LINKS V1 START */
+.account-inline-links{
+  align-items:center;
+  justify-content:center;
+}
+.account-inline-links a{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:40px;
+  padding:.5rem .72rem;
+  border:1px solid rgba(23,32,29,.2);
+  border-radius:999px;
+  background:#f7f0e2;
+  color:#17352f;
+  text-decoration:none;
+  font-size:.78rem;
+  font-weight:900;
+}
+.account-inline-links a:hover,
+.account-inline-links a:focus-visible{
+  border-color:rgba(184,138,60,.72);
+  background:#f1e3c9;
+}
+.account-inline-links-single{
+  justify-content:center;
+  margin-top:1rem;
+}
+/* VENI ACCOUNT AUTH LINKS V1 END */

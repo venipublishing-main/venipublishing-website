@@ -25,7 +25,7 @@
     !config.publishableKey.includes("YOUR_SB_PUBLISHABLE_KEY");
 
   if (!configured || !window.supabase?.createClient) {
-    setStatus("The Veni Account preview is not connected to its staging backend.", "setup");
+    setStatus("Veni Account is temporarily unavailable.", "setup");
     document.documentElement.dataset.accountState = "unconfigured";
     signedIn.forEach(el => el.hidden = true);
     signedOut.forEach(el => el.hidden = false);
@@ -36,6 +36,23 @@
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   });
   window.veniAccount = { client };
+  const signOutRequest = new URLSearchParams(window.location.search);
+  if (signOutRequest.get("signout") === "1") {
+    const rawNext = signOutRequest.get("next") || "/";
+    let next = "/";
+    try {
+      const candidate = new URL(rawNext, window.location.origin);
+      if (candidate.origin === window.location.origin) {
+        next = candidate.pathname + candidate.search + candidate.hash;
+      }
+    } catch {}
+
+    client.auth.signOut().finally(() => {
+      try { sessionStorage.removeItem("veni_after_auth"); } catch {}
+      window.location.replace(next);
+    });
+    return;
+  }
 
   const getSafeNext = () => {
     const candidates = [
@@ -71,6 +88,10 @@
 
   const markSession = user => {
     document.documentElement.dataset.accountState = user ? "signed-in" : "signed-out";
+    if (typeof window.syncVeniAccountNav === "function") {
+      window.syncVeniAccountNav(!!user);
+      return;
+    }
     accountNav.forEach(link => {
       link.textContent = user ? "My Account" : "Veni Account";
       link.dataset.signedIn = user ? "true" : "false";

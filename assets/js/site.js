@@ -478,3 +478,171 @@
       meta.textContent = 'Please use Instagram for the latest published briefing.';
     });
 })();
+/* VENI ACCOUNT NAV STATUS V1 START */
+(() => {
+  const accountPath = "/account/";
+
+  const getStoredSession = () => {
+    try {
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (!key || !/^sb-.*-auth-token$/.test(key)) continue;
+
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+
+        const value = JSON.parse(raw);
+        if (value && typeof value === "object" &&
+            (value.user || value.access_token || value.refresh_token)) {
+          return value;
+        }
+      }
+    } catch {}
+    return null;
+  };
+
+  const closeAllMenus = (except = null) => {
+    document.querySelectorAll("[data-account-menu]").forEach((menu) => {
+      if (menu === except) return;
+      const button = menu.querySelector("[data-account-menu-button]");
+      const popover = menu.querySelector("[data-account-menu-popover]");
+      if (button) button.setAttribute("aria-expanded", "false");
+      if (popover) popover.hidden = true;
+    });
+  };
+
+  const signOutHref = () => {
+    const next = window.location.pathname + window.location.search + window.location.hash;
+    return `${accountPath}?signout=1&next=${encodeURIComponent(next)}`;
+  };
+
+  const buildMenu = (signedIn) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "nav-account-menu";
+    wrapper.setAttribute("data-account-menu", "");
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "nav-account";
+    button.setAttribute("data-account-nav", "");
+    button.setAttribute("data-account-menu-button", "");
+    button.setAttribute("aria-haspopup", "menu");
+    button.setAttribute("aria-expanded", "false");
+    button.dataset.signedIn = signedIn ? "true" : "false";
+
+    const dot = document.createElement("span");
+    dot.className = "nav-account-dot";
+    dot.setAttribute("aria-hidden", "true");
+
+    const label = document.createElement("span");
+    label.className = "nav-account-label";
+    label.textContent = signedIn ? "My Account" : "Veni Account";
+
+    const chevron = document.createElement("span");
+    chevron.className = "nav-account-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "v";
+
+    button.append(dot, label, chevron);
+
+    const popover = document.createElement("div");
+    popover.className = "nav-account-popover";
+    popover.setAttribute("data-account-menu-popover", "");
+    popover.setAttribute("role", "menu");
+    popover.hidden = true;
+
+    if (signedIn) {
+      popover.innerHTML = `
+        <a role="menuitem" href="/account/">Account home</a>
+        <a role="menuitem" href="/account/library/">My Library</a>
+        <a role="menuitem" href="/account/settings/">Settings</a>
+        <a role="menuitem" href="${signOutHref()}" data-account-signout>Sign out</a>
+      `;
+    } else {
+      popover.innerHTML = `
+        <a role="menuitem" href="/account/sign-in/">Sign in</a>
+        <a role="menuitem" href="/account/register/">Create account</a>
+      `;
+    }
+
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const opening = button.getAttribute("aria-expanded") !== "true";
+      closeAllMenus(wrapper);
+      button.setAttribute("aria-expanded", String(opening));
+      popover.hidden = !opening;
+    });
+
+    wrapper.append(button, popover);
+    return wrapper;
+  };
+
+  const findInsertTarget = (container) => {
+    const cta = container.querySelector(".nav-cta");
+    if (cta) return cta;
+
+    const links = Array.from(container.querySelectorAll(":scope > a"));
+    const publishing = links.find((link) => link.textContent.trim() === "Veni Publishing");
+    if (publishing) return publishing;
+
+    const contact = links.find((link) => link.textContent.trim() === "Contact");
+    if (contact) return contact;
+
+    return links.length ? links[links.length - 1] : null;
+  };
+
+  const removeLegacyAccountLinks = (container) => {
+    container.querySelectorAll(":scope > .nav-account, :scope > [data-account-nav], :scope > .nav-account-menu")
+      .forEach((node) => node.remove());
+  };
+
+  const installMenu = (container, signedIn) => {
+    removeLegacyAccountLinks(container);
+    const menu = buildMenu(signedIn);
+    const target = findInsertTarget(container);
+    container.insertBefore(menu, target);
+  };
+
+  const installFooterLink = () => {
+    document.querySelectorAll(".footer-col").forEach((column) => {
+      const heading = column.querySelector("h3");
+      if (!heading || heading.textContent.trim() !== "Publishing house") return;
+      if (column.querySelector("[data-account-footer]")) return;
+
+      const link = document.createElement("a");
+      link.href = accountPath;
+      link.textContent = "Veni Account";
+      link.setAttribute("data-account-footer", "");
+
+      const contact = Array.from(column.querySelectorAll("a")).find(
+        (item) => item.textContent.trim() === "Contact"
+      );
+      column.insertBefore(link, contact || null);
+    });
+  };
+
+  const syncAccountNav = (forcedSignedIn = null) => {
+    const signedIn = forcedSignedIn === null ? !!getStoredSession() : !!forcedSignedIn;
+
+    document.querySelectorAll(".desktop-nav").forEach((nav) => {
+      installMenu(nav, signedIn);
+    });
+
+    document.querySelectorAll(".mobile-menu .container").forEach((nav) => {
+      installMenu(nav, signedIn);
+    });
+
+    installFooterLink();
+  };
+
+  window.syncVeniAccountNav = syncAccountNav;
+
+  syncAccountNav();
+
+  document.addEventListener("click", () => closeAllMenus());
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeAllMenus();
+  });
+  window.addEventListener("storage", () => syncAccountNav());
+})();
+/* VENI ACCOUNT NAV STATUS V1 END */
