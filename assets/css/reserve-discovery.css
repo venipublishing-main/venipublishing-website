@@ -1,0 +1,7 @@
+/* Scoped discovery addition; existing platform styling remains unchanged. */
+.reserve-discovery-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem; align-items: center; border: 1px solid var(--vp-bronze); border-radius: .5rem; padding: 2rem; background: var(--vp-paper, #faf7f0); }
+.reserve-discovery-card h2 { margin-top: .6rem; }
+.reserve-discovery-card p { overflow-wrap: anywhere; }
+.reserve-discovery-pending { font-size: .9rem; margin-top: 1rem; }
+.reserve-discovery-card a:focus-visible { outline: 3px solid var(--vp-green); outline-offset: 4px; }
+@media (max-width: 760px) { .reserve-discovery-card { grid-template-columns: minmax(0, 1fr); padding: 1.25rem; gap: 1rem; } .reserve-discovery-card .btn { white-space: normal; text-align: center; } }
