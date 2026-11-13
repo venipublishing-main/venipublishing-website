@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 
 ROOT = Path(__file__).resolve().parents[1]
 PLAYGROUND = "https://vf-reserve-playground.veni-reserve.workers.dev/playground"
+RESERVE = "https://vf-reserve-app-preview.veni-reserve.workers.dev/"
 class Page(HTMLParser):
     def __init__(self, source):
         super().__init__(); self.links=[]; self.ids=[]; self.canonical=[]; self.reserve_links=[]; self.depth=0
@@ -21,6 +22,8 @@ class Discovery(unittest.TestCase):
                 text=(ROOT/path).read_text(encoding="utf-8"); p=Page(text)
                 self.assertEqual(p.canonical,["https://venipublishing.co.za"+canonical])
                 self.assertEqual(p.links.count(PLAYGROUND),1)
+                self.assertEqual(p.links.count(RESERVE),1)
+                self.assertIn("non-production review",text)
                 self.assertEqual(p.ids.count("reserve-title"),1)
                 self.assertIn("Software in development",text); self.assertIn("Simulation only",text)
                 self.assertIn("not yet launched",text)
@@ -38,6 +41,6 @@ class Discovery(unittest.TestCase):
         for path in ["index.html","platforms/index.html"]:
             source=(ROOT/path).read_text(encoding="utf-8")
             section=source[source.index('<section class="section-sm reserve-discovery"'):].split('</section>',1)[0]
-            self.assertEqual(Page(section).links,[PLAYGROUND])
+            self.assertEqual(Page(section).links,[RESERVE,PLAYGROUND])
             self.assertNotIn('<script',section); self.assertNotIn('<form',section)
 if __name__=="__main__": unittest.main()
