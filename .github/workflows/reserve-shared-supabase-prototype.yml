@@ -5,7 +5,9 @@ on:
     paths:
       - '.github/workflows/reserve-shared-supabase-prototype.yml'
       - 'scripts/merge-reserve-m1.mjs'
+      - 'scripts/merge-reserve-m2.mjs'
       - 'tests/merge-reserve-m1.test.mjs'
+      - 'tests/merge-reserve-m2.test.mjs'
       - 'tests/integration/**'
 
 permissions:
@@ -57,8 +59,9 @@ jobs:
           node-version: '24'
       - name: Verify pinned Reserve inputs and static conversions
         run: |
-          node --test website/tests/merge-reserve-m1.test.mjs
+          node --test website/tests/merge-reserve-m1.test.mjs website/tests/merge-reserve-m2.test.mjs
           node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-merge-preview"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-merge-preview"
       - name: Verify local PostgreSQL schema and two-tenant RLS
         run: |
           psql --version
@@ -72,6 +75,11 @@ jobs:
             -f "$RUNNER_TEMP/reserve-merge-preview/preview-2-m1b.sql" \
             -f "$RUNNER_TEMP/reserve-merge-preview/preview-3-m12.sql" \
             -f website/tests/integration/shared-backend-verify.sql
+      - name: Verify Reserve M2.1 settings RPC and audit journal
+        run: |
+          psql -X -v ON_ERROR_STOP=1 \
+            -f "$RUNNER_TEMP/reserve-merge-preview/preview-4-m21.sql" \
+            -f website/tests/integration/reserve-business-settings-verify.sql
       - name: Prove Reserve-only extraction and reversible removal
         run: |
           # A clean, second database represents a future standalone Reserve.
@@ -84,11 +92,11 @@ jobs:
           # Use the PostgreSQL 17 server container's own dump/restore tools,
           # regardless of the client version installed on the GitHub runner.
           docker exec "${{ job.services.postgres.id }}" \
-            pg_dump -U postgres -d veni_merge_ci --format=custom --no-owner \
+            pg_dump -U postgres -d veni_merge_ci --format=custom \
               --schema=reserve --schema=reserve_internal \
               > "$RUNNER_TEMP/reserve-only.dump"
           docker exec -i "${{ job.services.postgres.id }}" \
-            pg_restore -U postgres -d veni_reserve_extract_ci --no-owner \
+            pg_restore -U postgres -d veni_reserve_extract_ci \
               < "$RUNNER_TEMP/reserve-only.dump"
 
           PGDATABASE=veni_reserve_extract_ci psql -X -v ON_ERROR_STOP=1 \
