@@ -33,7 +33,8 @@ rollback;
 -- The rollback means the original shared database still has Reserve intact.
 do $$ begin
   if to_regclass('reserve.tenants') is null
-    or (select count(*) from public.profiles) <> 3 then
+    or (select count(*) from public.profiles) <> 3
+    or not exists (select 1 from pg_catalog.pg_roles where rolname='reserve_settings_executor') then
     raise exception 'Reversible Reserve removal drill failed to roll back cleanly';
   end if;
 end $$;
