@@ -78,7 +78,16 @@ export function getApprovedRedirect(redirectUrl, registeredCallbacks) {
   const failure = response.searchParams.getAll("error");
   if ((success.length === 1) === (failure.length === 1)) return null;
   if ((success.length === 1 && !success[0]) || (failure.length === 1 && !failure[0])) return null;
-  if (success.length > 1 || failure.length > 1 || response.searchParams.getAll("state").length > 1) return null;
+  const state = response.searchParams.getAll("state");
+  // Veni clients are required to generate and verify a unique OAuth state.
+  if (success.length > 1 || failure.length > 1 || state.length !== 1 || !state[0] ||
+      state[0].length > 512) return null;
+  const acceptedKeys = success.length === 1
+    ? new Set(["code", "state", "iss"])
+    : new Set(["error", "error_description", "error_uri", "state", "iss"]);
+  for (const key of response.searchParams.keys()) {
+    if (!acceptedKeys.has(key) || response.searchParams.getAll(key).length !== 1) return null;
+  }
 
   for (const callback of registeredCallbacks) {
     const allowed = safeCallback(callback);
