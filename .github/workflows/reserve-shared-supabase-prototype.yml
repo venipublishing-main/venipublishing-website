@@ -72,3 +72,26 @@ jobs:
             -f "$RUNNER_TEMP/reserve-merge-preview/preview-2-m1b.sql" \
             -f "$RUNNER_TEMP/reserve-merge-preview/preview-3-m12.sql" \
             -f website/tests/integration/shared-backend-verify.sql
+      - name: Prove Reserve-only extraction and reversible removal
+        run: |
+          # A clean, second database represents a future standalone Reserve.
+          createdb veni_reserve_extract_ci
+          PGDATABASE=veni_reserve_extract_ci psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/mock-supabase-auth.sql
+          PGDATABASE=veni_reserve_extract_ci psql -X -v ON_ERROR_STOP=1 \
+            -c "insert into auth.users (id, email) values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'owner-a@example.invalid'), ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'owner-b@example.invalid')"
+
+          # Use the PostgreSQL 17 server container's own dump/restore tools,
+          # regardless of the client version installed on the GitHub runner.
+          docker exec "${{ job.services.postgres.id }}" \
+            pg_dump -U postgres -d veni_merge_ci --format=custom --no-owner \
+              --schema=reserve --schema=reserve_internal \
+              > "$RUNNER_TEMP/reserve-only.dump"
+          docker exec -i "${{ job.services.postgres.id }}" \
+            pg_restore -U postgres -d veni_reserve_extract_ci --no-owner \
+              < "$RUNNER_TEMP/reserve-only.dump"
+
+          PGDATABASE=veni_reserve_extract_ci psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/extracted-reserve-verify.sql
+          psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/website-after-reserve-removal-drill.sql
