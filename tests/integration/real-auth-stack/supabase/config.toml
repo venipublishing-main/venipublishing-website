@@ -21,7 +21,7 @@ jwt_expiry = 3600
 enable_signup = true
 
 [auth.email]
-enable_signup = true
+enabled = true
 # CI only: generate immediately usable sessions; hosted projects may require
 # verification and will be audited separately before any migration.
 enable_confirmations = false
