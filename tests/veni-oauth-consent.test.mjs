@@ -63,6 +63,9 @@ test("validates completed callback without accepting lookalikes or open redirect
     `${CALLBACK}?code=one&code=two`,
     `${CALLBACK}?code=one&error=access_denied`,
     `${CALLBACK}?state=one`,
+    `${CALLBACK}?code=one`,
+    `${CALLBACK}?code=one&state=valid&next=https://evil.test`,
+    `${CALLBACK}?code=one&state=valid&state=again`,
     `${CALLBACK}?code=one#fragment`,
     `http://reserve.venipublishing.co.za/auth/callback?code=one`,
   ]) assert.equal(getApprovedRedirect(url, [CALLBACK]), null, url);
@@ -169,9 +172,9 @@ test("malicious approval response remains blocked after consent", async () => {
 });
 
 test("previously granted authorization may redirect only to allowlisted callback", async () => {
-  const allowed = harness({ data: { redirect_url: `${CALLBACK}?code=once` } });
+  const allowed = harness({ data: { redirect_url: `${CALLBACK}?code=once&state=returning` } });
   assert.equal((await initOAuthConsent(allowed.win, allowed.doc)).state, "redirected");
-  const blocked = harness({ data: { redirect_url: `${BAD_CALLBACK}?code=once` } });
+  const blocked = harness({ data: { redirect_url: `${BAD_CALLBACK}?code=once&state=returning` } });
   assert.equal((await initOAuthConsent(blocked.win, blocked.doc)).state, "error");
   assert.deepEqual(blocked.events.redirects, []);
 });
