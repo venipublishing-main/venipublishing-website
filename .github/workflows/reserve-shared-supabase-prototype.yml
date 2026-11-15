@@ -149,6 +149,13 @@ jobs:
       - name: Start disposable Supabase Auth + PostgREST on loopback only
         working-directory: website/tests/integration/real-auth-stack
         run: |
+          # PostgREST requires every configured exposed schema to exist at
+          # startup. Use the CLI migration generator for the disposable CI
+          # bootstrap; real Reserve M1 DDL still applies later unchanged.
+          supabase migration new reserve_api_schema_bootstrap
+          bootstrap_sql="$(rg --files supabase/migrations | rg '/[0-9]+_reserve_api_schema_bootstrap\.sql$')"
+          test -n "$bootstrap_sql"
+          cp ../real-auth-schema-bootstrap.sql "$bootstrap_sql"
           supabase start -x studio,realtime,storage,imgproxy,edge-runtime
           supabase status -o env > "$RUNNER_TEMP/local-supabase.env"
       - name: Apply website, Arcana and Reserve SQL to local Auth stack and test HTTP sessions
