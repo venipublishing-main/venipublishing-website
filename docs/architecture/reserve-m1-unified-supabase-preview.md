@@ -48,6 +48,16 @@ This is a **database-domain reversibility proof**, not a complete Supabase-to-Su
 - The conversion preserves original trigger and RLS logic; its semantic correctness still needs execution against local PostgreSQL, particularly privilege ownership and `SECURITY DEFINER` behavior.
 - A standalone Reserve `reserve.users.id` FK still points to the **destination** `auth.users(id)`; cross-project Auth UUID mapping and the website's direct user-deletion Edge Function remain explicit blockers for hosted cutover.
 
+## Forward dependency audit — NOT imported
+
+The next unmerged Reserve code is deliberately **not** included in this prototype:
+
+1. **Draft PR #16** (standalone SSR preview) provides a prerequisite application/session layer, not a completed Veni-wide session integration.
+2. **Draft PR #20**, stacked on #16, adds `20261113111616_tenant_bootstrap.sql`, a genuine-session tenant bootstrap, local authenticated setup flows and the `veni_bootstrap_executor` role. It references `auth.sessions` and additional `auth.users` lifecycle fields which the current lightweight PostgreSQL Auth mock does **not** model. Its `public.current_reserve_user`, `public.bootstrap_setup_tenant` and `public.list_setup_tenants` functions will require reviewed Reserve-prefixed endpoints and a role namespace. **Do not infer that the M1/M2.1 CI proves this later real-session behavior.**
+3. **Draft PR #22**, stacked on #20, adds `20261114110626_theme_revisions_private_drafts.sql`, a `veni_theme_executor` role, private Theme revisions and more public RPCs. The owner's browser acceptance and a production Theme API contract remain outstanding. It is not eligible for shared-backend import until its prerequisites and owner review are settled.
+
+The unifying rule remains **one Veni Account and one canonical Supabase Auth user ID**, with Reserve membership/tenant records associated with that ID. Reserve's UI may remain a separate deployment, but it must use the parent Veni identity and explicit Sphere entitlements; it must never silently create a second independent identity. The next safe test slice is genuine local Supabase Auth/SSR and tenant bootstrap against the shared schema, with cross-Sphere login, logout/revocation, deleted-account handling and cross-tenant denial. This is a design gate, not authority for a live migration.
+
 ## Definition of done for this preview
 
 - [x] Generator test suites pass locally: ten checks across M1 and M2.1.
