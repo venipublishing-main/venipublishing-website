@@ -1,0 +1,32 @@
+name: Veni Account OAuth consent preview checks
+on:
+  pull_request:
+    paths:
+      - 'account/authorize/**'
+      - 'assets/js/veni-oauth-*'
+      - 'assets/css/veni-oauth-consent.css'
+      - 'tests/veni-oauth-consent.test.mjs'
+      - 'docs/architecture/veni-account-oauth2-consent-preview.md'
+      - '.github/workflows/veni-account-oauth-consent-preview.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Static syntax
+        run: |
+          node --check assets/js/veni-oauth-contract.mjs
+          node --check assets/js/veni-oauth-consent.mjs
+          node --check assets/js/veni-oauth-clients.js
+      - name: Consent contract and controller tests
+        run: node --test tests/veni-oauth-consent.test.mjs
+      - name: Preview must remain inactive
+        run: |
+          grep -Fq 'window.VENI_OAUTH_ALLOWED_CLIENTS = Object.freeze([]);' assets/js/veni-oauth-clients.js
+          grep -Fq 'skipBrowserRedirect: true' assets/js/veni-oauth-consent.mjs
