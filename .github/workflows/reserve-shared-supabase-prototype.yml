@@ -108,3 +108,77 @@ jobs:
 
           PGDATABASE=veni_reserve_extract_ci psql -X -v ON_ERROR_STOP=1 \
             -f website/tests/integration/extracted-reserve-verify.sql
+
+  # Separately exercise the real Supabase GoTrue/Auth and PostgREST services.
+  # This does NOT import the unfinished Reserve PR #16/#20/#22 application
+  # features. No linked project, hosted credentials, or remote commands exist.
+  real-auth-postgrest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: ecb6b23fc4ee8ec15fbb6074a3e347f87f3d0555
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301
+          path: website-preview
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3 action commit
+        with:
+          version: 3.0.0
+      - name: Verify CLI invocation and generate pinned Reserve SQL
+        run: |
+          supabase --version
+          supabase start --help
+          supabase status --help
+          node --check website/tests/integration/real-auth-smoke.mjs
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-merge-auth"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-merge-auth"
+      - name: Start disposable Supabase Auth + PostgREST on loopback only
+        working-directory: website/tests/integration/real-auth-stack
+        run: |
+          supabase start -x studio,realtime,storage,imgproxy,edge-runtime
+          supabase status -o env > "$RUNNER_TEMP/local-supabase.env"
+      - name: Apply website, Arcana and Reserve SQL to local Auth stack and test HTTP sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/local-supabase.env"
+          set +a
+          # A locally running database is mandatory; do not use a linked/remote project.
+          case "$DB_URL" in
+            postgresql://*@127.0.0.1:54322/postgres|postgres://*@127.0.0.1:54322/postgres) ;;
+            *) echo 'Refusing non-local database URL'; exit 1 ;;
+          esac
+          case "$API_URL" in
+            http://127.0.0.1:54321|http://localhost:54321) ;;
+            *) echo 'Refusing non-local Supabase API URL'; exit 1 ;;
+          esac
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f "$RUNNER_TEMP/reserve-merge-auth/preview-1-m1a.sql" \
+            -f "$RUNNER_TEMP/reserve-merge-auth/preview-2-m1b.sql" \
+            -f "$RUNNER_TEMP/reserve-merge-auth/preview-3-m12.sql" \
+            -f "$RUNNER_TEMP/reserve-merge-auth/preview-4-m21.sql"
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
+          node website/tests/integration/real-auth-smoke.mjs
+      - name: Stop disposable Supabase services
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/real-auth-stack
+        run: supabase stop
