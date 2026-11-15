@@ -82,6 +82,13 @@ jobs:
             -f website/tests/integration/reserve-business-settings-verify.sql
       - name: Prove Reserve-only extraction and reversible removal
         run: |
+          # First simulate complete Reserve removal from the original shared
+          # database. A PostgreSQL role is cluster-global, so dropping it must
+          # precede creation of the extracted database on this CI server.
+          # The SQL drill rolls back the entire removal, including the role.
+          psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/website-after-reserve-removal-drill.sql
+
           # A clean, second database represents a future standalone Reserve.
           createdb veni_reserve_extract_ci
           PGDATABASE=veni_reserve_extract_ci psql -X -v ON_ERROR_STOP=1 \
@@ -101,5 +108,3 @@ jobs:
 
           PGDATABASE=veni_reserve_extract_ci psql -X -v ON_ERROR_STOP=1 \
             -f website/tests/integration/extracted-reserve-verify.sql
-          psql -X -v ON_ERROR_STOP=1 \
-            -f website/tests/integration/website-after-reserve-removal-drill.sql
