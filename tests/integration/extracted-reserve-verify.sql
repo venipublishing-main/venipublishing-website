@@ -10,11 +10,11 @@ begin
   end if;
 
   if (select count(*) from pg_catalog.pg_tables where schemaname='reserve') <> 8
-    or (select count(*) from pg_catalog.pg_tables where schemaname='reserve_internal') <> 2 then
-    raise exception 'Extracted Reserve is missing M1 tables';
+    or (select count(*) from pg_catalog.pg_tables where schemaname='reserve_internal') <> 5 then
+    raise exception 'Extracted Reserve is missing M1 or M2.1 tables';
   end if;
   if (select count(*) from pg_catalog.pg_tables where schemaname='reserve' and rowsecurity) <> 8
-    or (select count(*) from pg_catalog.pg_tables where schemaname='reserve_internal' and rowsecurity) <> 2 then
+    or (select count(*) from pg_catalog.pg_tables where schemaname='reserve_internal' and rowsecurity) <> 5 then
     raise exception 'Reserve RLS settings were not preserved by extraction';
   end if;
   if (select count(*) from reserve.tenants) <> 2
@@ -23,6 +23,16 @@ begin
     or (select count(*) from reserve.roles) <> 4
     or (select count(*) from reserve.users) <> 2 then
     raise exception 'Tenant, membership, ownership or system-role data did not survive export';
+  end if;
+  if (select count(*) from reserve_internal.tenant_business_settings) <> 1
+    or (select count(*) from reserve_internal.tenant_business_settings_changes) <> 1 then
+    raise exception 'M2.1 settings and append-only revision journal did not survive';
+  end if;
+  if (select pg_catalog.pg_get_userbyid(p.proowner)
+      from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+      where n.nspname='reserve_internal' and p.proname='save_tenant_business_settings')
+    is distinct from 'reserve_settings_executor' then
+    raise exception 'Export lost the RLS-bound ownership of the settings writer';
   end if;
   if to_regprocedure('reserve_internal.has_capability(uuid,text)') is null
     or has_schema_privilege('anon','reserve','USAGE')
@@ -48,4 +58,4 @@ begin
 end $$;
 rollback;
 
-select 'Reserve M1 domain extracted into a standalone database; RLS and owner data preserved' as extraction_result;
+select 'Reserve M1 + M2.1 private domain extracted; RLS, owner and settings records preserved' as extraction_result;
