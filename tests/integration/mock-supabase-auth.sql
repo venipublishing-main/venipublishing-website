@@ -1,9 +1,20 @@
 -- Disposable Postgres-only approximation of the Supabase Auth surface.
 -- This file is ONLY for the public GitHub Actions integration runner.
 -- It does not seed or connect to any hosted Supabase project.
-create role anon nologin;
-create role authenticated nologin;
-create role service_role nologin;
+-- Roles are PostgreSQL-cluster global, while each test database has its own
+-- auth schema. The extraction rehearsal uses two databases in one CI server.
+do $$
+begin
+  if not exists (select 1 from pg_catalog.pg_roles where rolname = 'anon') then
+    execute 'create role anon nologin';
+  end if;
+  if not exists (select 1 from pg_catalog.pg_roles where rolname = 'authenticated') then
+    execute 'create role authenticated nologin';
+  end if;
+  if not exists (select 1 from pg_catalog.pg_roles where rolname = 'service_role') then
+    execute 'create role service_role nologin';
+  end if;
+end $$;
 
 create schema auth;
 create table auth.users (
