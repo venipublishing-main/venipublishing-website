@@ -1,12 +1,21 @@
 -- Transactional, rollback-only simulation of removing both Reserve schemas
 -- from the synthetic shared database. Never run this on a hosted project.
 begin;
+-- String-bodied SQL functions can survive schema removal, so explicitly
+-- remove the two public Reserve adapters before dropping private domains.
+drop function public.reserve_read_tenant_business_settings(uuid);
 drop schema reserve_internal, reserve cascade;
+drop role reserve_settings_executor;
 do $$
 begin
   if to_regclass('reserve.tenants') is not null
     or to_regclass('reserve_internal.invitations') is not null then
     raise exception 'Reserve removal drill left domain tables behind';
+  end if;
+  if exists (select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n
+      on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'reserve_%')
+    or exists (select 1 from pg_catalog.pg_roles where rolname='reserve_settings_executor') then
+    raise exception 'Reserve removal left an exposed RPC or a custom role behind';
   end if;
   if (select count(*) from public.profiles) <> 3
     or (select count(*) from public.arcana_readings) <> 1
