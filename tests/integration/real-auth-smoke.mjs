@@ -2,6 +2,7 @@
 // The script refuses anything except the ephemeral loopback test ports.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const TENANT_A = '11111111-1111-4111-8111-111111111111';
@@ -142,10 +143,32 @@ async function main() {
   const staleAccess = await request('/rest/v1/rpc/reserve_read_tenant_business_settings', {
     method: 'POST', token: a.access_token, body: { target: TENANT_A },
   });
-  if (staleAccess.status < 400 && staleAccess.data?.state === 'configured') {
-    console.warn('GATE OPEN: old access JWT still reaches settings after sign-out; live cutover needs an auth.sessions-aware authorization check.');
+  const staleProfile = await request('/rest/v1/profiles?select=id', { token: a.access_token });
+  const staleArcana = await request('/rest/v1/arcana_readings?select=id', { token: a.access_token });
+  const stillAccessible = {
+    reserveSettings: staleAccess.status < 400 && staleAccess.data?.state === 'configured',
+    websiteProfile: staleProfile.status < 400 && Array.isArray(staleProfile.data)
+      && staleProfile.data.some((row) => row.id === a.user.id),
+    arcanaReading: staleArcana.status < 400 && Array.isArray(staleArcana.data)
+      && staleArcana.data.some((row) => row.id === reading),
+  };
+  const openSurfaces = Object.entries(stillAccessible).filter(([, open]) => open).map(([name]) => name);
+  if (openSurfaces.length) {
+    const warning = `Previously issued access JWT still works after sign-out on: ${openSurfaces.join(', ')}. `
+      + 'Block live cutover until sensitive operations have a revoked-session check and a complete cross-Sphere revocation policy.';
+    console.warn(`::warning title=Veni live cutover blocked by JWT revocation gap::${warning}`);
+    console.warn(`GATE OPEN: ${warning}`);
   } else {
-    console.log('PASS: stale access JWT denied settings after sign-out');
+    console.log('PASS: revoked access JWT denied every probed sensitive surface');
+  }
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+      `### Real Supabase Auth/REST integration\n` +
+      `- Functional tests: website, Arcana, Reserve, cross-tenant and refresh-token revocation **passed**.\n` +
+      `- Access-token revocation after sign-out: **${openSurfaces.length ? 'OPEN RELEASE BLOCKER' : 'all probed operations denied'}**.\n` +
+      `- Old JWT accessible surfaces: ${openSurfaces.join(', ') || 'none probed'}.\n` +
+      `- Browser SSR/PKCE, account deletion and other Spheres remain untested.\n` +
+      `- **Draft only; no hosted Supabase migration permitted by this result.**\n`);
   }
   const relogin = checkIdentity(await success('/auth/v1/token?grant_type=password', {
     method: 'POST', body: { email: emailA, password },
