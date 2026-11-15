@@ -170,13 +170,46 @@ async function main() {
       `- Browser SSR/PKCE, account deletion and other Spheres remain untested.\n` +
       `- **Draft only; no hosted Supabase migration permitted by this result.**\n`);
   }
+
+  // Counterfactual, not a deployed fix: apply a shared session guard ONLY to
+  // the disposable local database after recording the unguarded JWT failure.
+  psql(['-f', fileURLToPath(new URL('./real-auth-revocation-proof.sql', import.meta.url))]);
+  const guardedSettings = await readSettings(a.access_token, TENANT_A);
+  assert.equal(guardedSettings.error, 'unauthorized',
+    'Experimental session guard must reject a signed-out Reserve access token');
+  assertRows(await success('/rest/v1/profiles?select=id', { token: a.access_token }), [],
+    'Experimental guard must hide the signed-out website profile');
+  assertRows(await success('/rest/v1/arcana_readings?select=id', { token: a.access_token }), [],
+    'Experimental guard must hide the signed-out Arcana reading');
+  assertRows(await success(reserveTenants, { token: a.access_token, profile: 'reserve' }), [],
+    'Experimental guard must hide the signed-out Reserve tenant');
+  const guardedWrite = await request('/rest/v1/rpc/save_arcana_single_card_reading', {
+    method: 'POST', token: a.access_token,
+    body: { p_card_id: cards[0].id, p_question: 'Revoked token must fail', p_note: null },
+  });
+  assert.ok(guardedWrite.status >= 400, 'Revoked access token must not create a new Arcana reading');
+  assertRows(await success('/rest/v1/profiles?select=id', { token: b.access_token }), [b.user.id],
+    'Experimental guard must retain a different active user session');
+  console.log('PROOF PASS: experimental cross-Sphere live-session gate rejects revoked JWT, retains active B');
+
   const relogin = checkIdentity(await success('/auth/v1/token?grant_type=password', {
     method: 'POST', body: { email: emailA, password },
   }), 'Owner A second session');
   assert.equal(relogin.user.id, a.user.id, 'Re-login must preserve the canonical Veni Auth UUID');
   assert.equal((await readSettings(relogin.access_token, TENANT_A)).revision, 1,
     'Returning user must regain own Reserve tenant through the same website account');
+  assertRows(await success('/rest/v1/profiles?select=id', { token: relogin.access_token }), [a.user.id],
+    'New session must restore website profile access');
+  assertRows(await success('/rest/v1/arcana_readings?select=id', { token: relogin.access_token }), [reading],
+    'New session must restore own Arcana reading');
+  assertRows(await success(reserveTenants, { token: relogin.access_token, profile: 'reserve' }), [TENANT_A],
+    'New session must restore own Reserve tenant');
   console.log('PASS: refresh-token revocation, re-login, and shared identity persistence');
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+      `- Experimental local-only session guard: **PROOF PASSED**, signed-out JWT denied across private website/Arcana/Reserve operations; new login and unrelated active session retained.\n` +
+      `- The production release gate is **still OPEN**: this fixture is not a reviewed or deployed migration.\n`);
+  }
   console.log('Real local Supabase Auth + PostgREST shared-backend smoke completed; SSR browser/cookie flow remains future work.');
 }
 
