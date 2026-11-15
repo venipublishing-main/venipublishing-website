@@ -24,6 +24,19 @@ It intentionally excludes Reserve's later main business-settings migration and d
 5. Confirm `public.profiles`, `public.products`, `public.entitlements` and all `public.arcana_*` tables are unchanged. Run tenant A/B cross-read/write-denial, authenticated/anonymous/revoked-access checks, owner/audit invariants, and the original Reserve pgTAP suite. Check `auth.users` linkage and deletion behavior.
 6. Only once the full pipeline is green, use the installed **Supabase CLI's current `--help`** to create a real versioned migration via `supabase migration new ...` and compare its contents against the reviewed preview. CLI v3 changed defaults in November 2026. Keep this initial PR draft until verified.
 
+## Automated disposable PostgreSQL rehearsal
+
+The draft PR now contains an **actual PostgreSQL 17 GitHub Actions integration job**, not only static SQL checks. It loads the pinned website foundation, website sign-up/RPC hardening and Arcana pilot, then applies the three Reserve M1 previews. All users and tenants are synthetic; it uses a minimal mock `auth` schema instead of connecting to a live Supabase project. CI asserts original website table counts and content digests, namespace boundaries, all ten Reserve RLS-enabled tables, roles, Owner A/B isolation and the known direct-account-deletion blocker.
+
+The second CI step specifically rehearses **future Reserve extraction**:
+
+1. Create a second disposable PostgreSQL database with only the required Auth identity surface and two synthetic identity UUIDs.
+2. Dump only `reserve` and `reserve_internal` from the simulated shared database, including schema, data, policies, functions and access grants.
+3. Restore into the second database, verify neither website accounts nor Arcana tables were brought along, and re-check tenants, owner memberships, grants and RLS.
+4. On the original shared database, perform a **rollback-only** transaction that drops the two Reserve schemas, checks the website's accounts, products and Arcana content remain, then rolls back and verifies both parts are intact.
+
+This is a **database-domain reversibility proof**, not a complete Supabase-to-Supabase production migration. A real extraction must additionally handle Supabase Auth identities and account deletion, Storage buckets, Edge Functions, API/schema configuration, secrets, domains, operational services, files, production data ownership/consent and client redirects. The original Reserve project is retained throughout the prototype.
+
 ## Safety choices in conversion
 
 - Only the eight allowlisted Reserve `public.*` relations become `reserve.*`; new `public.*` references halt the generator for human review.
@@ -36,12 +49,12 @@ It intentionally excludes Reserve's later main business-settings migration and d
 
 ## Definition of done for this preview
 
-- [ ] Generator test suite passes locally.
-- [ ] Exact hosted M1 source digests pass and all three SQL previews generate.
+- [x] Generator test suite passes locally: six tests.
+- [x] Exact hosted M1 source digests pass and all three SQL previews generate.
 - [ ] Manual diff shows no website `public` grants, schemas, tables or account triggers affected.
-- [ ] Disposable local database applies all previews in order, with RLS/security advisors clean.
+- [x] Disposable PostgreSQL 17 CI database applies all three M1 previews; website account/Arcana and two-tenant RLS smoke checks pass. This is **not** a Supabase security-advisor pass.
 - [ ] Reserve original database tests and website account/Arcana regressions pass.
-- [ ] Test tenant identity mapping, account deletion, reverse extraction and SSR sign-in are addressed in follow-on work.
+- [ ] Test tenant identity mapping, account deletion and SSR sign-in are addressed in follow-on work; CI reverse-extraction drill is only a database-domain rehearsal.
 - [ ] Ian separately approves any *hosted* Supabase migration/cutover. Not granted by this preview PR.
 
 Canonical design: [Unified Supabase Merger Blueprint v0.1](https://docs.google.com/document/d/1SF0VqLmbFcXHVYVRza5CWTTLc9L_4iiMwR98Mq6Fz08/edit). Sources: [Reserve repo](https://github.com/venipublishing-main/veni-reserve), [Supabase custom schemas](https://supabase.com/docs/guides/api/using-custom-schemas), and [API security](https://supabase.com/docs/guides/api/securing-your-api).
