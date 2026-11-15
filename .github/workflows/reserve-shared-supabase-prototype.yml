@@ -1,0 +1,74 @@
+name: Reserve shared Supabase prototype (local Postgres only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-shared-supabase-prototype.yml'
+      - 'scripts/merge-reserve-m1.mjs'
+      - 'tests/merge-reserve-m1.test.mjs'
+      - 'tests/integration/**'
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: veni_merge_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd 'pg_isready -U postgres -d veni_merge_ci'
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: veni_merge_ci
+      PGUSER: postgres
+      PGPASSWORD: local_ci_only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: ecb6b23fc4ee8ec15fbb6074a3e347f87f3d0555
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301
+          path: website-preview
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify pinned Reserve inputs and static conversions
+        run: |
+          node --test website/tests/merge-reserve-m1.test.mjs
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-merge-preview"
+      - name: Verify local PostgreSQL schema and two-tenant RLS
+        run: |
+          psql --version
+          psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/mock-supabase-auth.sql \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f website/tests/integration/website-before-reserve.sql \
+            -f "$RUNNER_TEMP/reserve-merge-preview/preview-1-m1a.sql" \
+            -f "$RUNNER_TEMP/reserve-merge-preview/preview-2-m1b.sql" \
+            -f "$RUNNER_TEMP/reserve-merge-preview/preview-3-m12.sql" \
+            -f website/tests/integration/shared-backend-verify.sql
