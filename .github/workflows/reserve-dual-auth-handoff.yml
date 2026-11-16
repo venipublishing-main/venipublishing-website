@@ -7,6 +7,7 @@ on:
       - 'tests/integration/dual-auth-source/**'
       - 'tests/integration/dual-auth-target/**'
       - 'tests/integration/real-dual-auth-handoff.mjs'
+      - 'tests/integration/real-dual-auth-hash-import.mjs'
 
 permissions:
   contents: read
@@ -33,6 +34,7 @@ jobs:
           set -euo pipefail
           supabase --version
           node --check website/tests/integration/real-dual-auth-handoff.mjs
+          node --check website/tests/integration/real-dual-auth-hash-import.mjs
           cd website/tests/integration/dual-auth-source
           supabase stack --help
           supabase start --help
@@ -74,6 +76,7 @@ jobs:
             -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
             -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql
           node website/tests/integration/real-dual-auth-handoff.mjs
+          node website/tests/integration/real-dual-auth-hash-import.mjs
       - name: Stop Reserve source local stack
         if: always()
         continue-on-error: true
