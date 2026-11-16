@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { reserveDeletionDecision } from "../_shared/reserve-account-deletion-policy.mjs";
 
 const allowedOrigins = new Set([
   "https://venipublishing-main.github.io",
@@ -50,6 +51,23 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: "Authentication required." }), {
       status: 401, headers: { ...cors, "Content-Type": "application/json" }
     });
+  }
+
+  // This flag is OFF unless the shared Reserve schema, self-only RPC and
+  // privacy workflow have been reviewed and explicitly enabled together.
+  // No hosted configuration change is made by this draft.
+  if (Deno.env.get("VENI_SHARED_RESERVE_DELETE_PREFLIGHT") === "enabled") {
+    // User JWT + invoker RLS, never service role: the RPC reads only the
+    // caller's Reserve projection and owner assignments, not arbitrary IDs.
+    const { data: state, error: preflightError } = await userClient.rpc(
+      "reserve_account_deletion_preflight"
+    );
+    const decision = reserveDeletionDecision(state, preflightError);
+    if (decision) {
+      return new Response(JSON.stringify({ error: decision.error, code: decision.code }), {
+        status: decision.status, headers: { ...cors, "Content-Type": "application/json" }
+      });
+    }
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {

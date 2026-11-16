@@ -1,0 +1,25 @@
+# Target Website local Supabase stack: independent Auth, DB, JWT issuer and keys.
+project_id = "veni_website_target_auth_ci"
+
+[experimental]
+stack = true
+
+[api]
+enabled = true
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = []
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enabled = true
+enable_confirmations = false

@@ -1,0 +1,181 @@
+name: Reserve atomic Auth and business cutover rehearsal (local only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-integrated-cutover-rehearsal.yml'
+      - 'tests/integration/integrated-auth-source/**'
+      - 'tests/integration/integrated-auth-target/**'
+      - 'tests/integration/real-auth-reserve-source-business-seed.sql'
+      - 'tests/integration/real-auth-reserve-integrated-rehearsal.mjs'
+      - 'tests/integration/verify-integrated-restored-clone.mjs'
+      - 'tests/integration/real-auth-schema-bootstrap.sql'
+      - 'tests/integration/reserve-account-deletion-preflight-prototype.sql'
+      - 'scripts/merge-reserve-m1.mjs'
+      - 'scripts/merge-reserve-m2.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  full-disposable-source-to-website:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      VENI_DUAL_AUTH_DISPOSABLE: 'yes'
+      VENI_ATOMIC_RESERVE_REHEARSAL: 'yes'
+      VENI_FULL_RESTORE_CI: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: ecb6b23fc4ee8ec15fbb6074a3e347f87f3d0555
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301
+          path: website-preview
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13
+        with:
+          version: 3.0.0
+      - name: Compile pinned Preview SQL and inspect CLI
+        run: |
+          set -euo pipefail
+          node --check website/tests/integration/real-auth-reserve-integrated-rehearsal.mjs
+          node --check website/tests/integration/verify-integrated-restored-clone.mjs
+          node --test website/tests/merge-reserve-m1.test.mjs website/tests/merge-reserve-m2.test.mjs
+          supabase --version
+          supabase stack --help
+          supabase migration new --help
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/integrated-reserve-preview"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/integrated-reserve-preview"
+      - name: Start genuine isolated Reserve SOURCE Auth and Postgres
+        working-directory: website/tests/integration/integrated-auth-source
+        run: |
+          set -euo pipefail
+          supabase start --exclude studio,mail,realtime,storage,functions,analytics --eager
+          supabase status --env --output-format text > "$RUNNER_TEMP/veni-integrated-source.env"
+      - name: Start genuine isolated Website TARGET Auth with Reserve API schema
+        working-directory: website/tests/integration/integrated-auth-target
+        run: |
+          set -euo pipefail
+          # PostgREST requires exposed schemas to exist before it boots.
+          supabase migration new reserve_api_schema_bootstrap
+          shopt -s nullglob
+          files=(supabase/migrations/*_reserve_api_schema_bootstrap.sql)
+          test "${#files[@]}" -eq 1
+          cp ../real-auth-schema-bootstrap.sql "${files[0]}"
+          supabase start --exclude studio,mail,realtime,storage,functions,analytics --eager
+          supabase status --env --output-format text > "$RUNNER_TEMP/veni-integrated-target.env"
+      - name: Apply source M1 and target Website + Arcana + Reserve preview (local only)
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/veni-integrated-source.env"
+          SOURCE_API_URL="$API_URL"
+          SOURCE_DB_URL="$DB_URL"
+          SOURCE_ANON_KEY="$ANON_KEY"
+          source "$RUNNER_TEMP/veni-integrated-target.env"
+          TARGET_API_URL="$API_URL"
+          TARGET_DB_URL="$DB_URL"
+          TARGET_ANON_KEY="$ANON_KEY"
+          set +a
+
+          for url in "$SOURCE_DB_URL" "$TARGET_DB_URL"; do
+            case "$url" in
+              postgresql://*@127.0.0.1:[23]*/postgres|postgres://*@127.0.0.1:[23]*/postgres|postgresql://*@localhost:[23]*/postgres|postgres://*@localhost:[23]*/postgres) ;;
+              *) echo 'Refusing non-loopback database'; exit 1 ;;
+            esac
+          done
+          psql "$SOURCE_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f reserve/supabase/migrations/20261030154642_m1_1a_tenant_user_membership_persistence.sql \
+            -f reserve/supabase/migrations/20261030174937_m1_1b_role_permission_invitation_audit_foundation.sql \
+            -f reserve/supabase/migrations/20261031031256_m1_2_rls_cross_tenant_security.sql
+
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f "$RUNNER_TEMP/integrated-reserve-preview/preview-1-m1a.sql" \
+            -f "$RUNNER_TEMP/integrated-reserve-preview/preview-2-m1b.sql" \
+            -f "$RUNNER_TEMP/integrated-reserve-preview/preview-3-m12.sql" \
+            -f "$RUNNER_TEMP/integrated-reserve-preview/preview-4-m21.sql" \
+            -f website/tests/integration/reserve-account-deletion-preflight-prototype.sql
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
+          node website/tests/integration/real-auth-reserve-integrated-rehearsal.mjs
+      - name: Restore disposable Website logical backup (excluding protected Vault data)
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/veni-integrated-target.env"
+          TARGET_DB_URL="$DB_URL"
+          set +a
+          # No live project or external connection can satisfy this gate.
+          node -e 'const assert=require("node:assert/strict"); const u=new URL(process.env.TARGET_DB_URL); assert.ok(["postgres:","postgresql:"].includes(u.protocol)); assert.ok(["localhost","127.0.0.1"].includes(u.hostname)); assert.ok(+u.port>=20000 && +u.port<=32767); assert.equal(u.pathname,"/postgres")'
+
+          umask 077
+          BACKUP_FILE="$RUNNER_TEMP/veni-integrated-disposable-full.dump"
+          # vault.secrets is an extension-managed, protected secrets store. A
+          # normal PostgreSQL restore cannot write it, even on this local stack.
+          # Secret/key recovery is a separate production cutover gate; never
+          # bypass Vault permissions or include secret payloads in CI artifacts.
+          docker run --rm --network host postgres:17 \
+            pg_dump --format=custom --no-owner \
+              --exclude-table-data=vault.secrets --dbname="$TARGET_DB_URL" > "$BACKUP_FILE"
+          test -s "$BACKUP_FILE"
+
+          # A new empty database on the SAME disposable PostgreSQL cluster.
+          # This proves logical recovery, not cross-cluster/global-role recovery.
+          RESTORED_DB_URL="$(node -e 'const u=new URL(process.env.TARGET_DB_URL); u.pathname="/veni_restored_ci"; process.stdout.write(u.href)')"
+          export RESTORED_DB_URL
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE veni_restored_ci TEMPLATE template0;'
+
+          # A Supabase local stack includes GRANTs on protected pg_catalog and
+          # extension functions. Carry application ACLs and schema USAGE grants
+          # for Auth/Storage, so restored RLS can call auth.uid()/auth.jwt().
+          # Other platform-managed grants are a separate recovery gate. Do not
+          # bypass protected functions' permission boundaries.
+          docker run --rm --network host -i postgres:17 \
+            pg_restore --list < "$BACKUP_FILE" > "$RUNNER_TEMP/veni-restore-original.toc"
+          # Default privileges owned by supabase_admin cannot be set by the
+          # normal postgres connection in a clean DB. These are a distinct
+          # platform configuration and privilege-reconstruction gate.
+          awk '/^[0-9]+;/ && / DEFAULT ACL / && /supabase_admin/ {
+            print ";" $0; next
+          } /^[0-9]+;/ && / ACL / {
+            if ($0 ~ / ACL (public|reserve|reserve_internal) / ||
+                $0 ~ / ACL - SCHEMA (auth|public|reserve|reserve_internal|storage) /) {print; next}
+            print ";" $0; next
+          } {print}' \
+            "$RUNNER_TEMP/veni-restore-original.toc" > "$RUNNER_TEMP/veni-restore-filtered.toc"
+          grep -q '^;[0-9].* ACL .*pg_stat_statements_reset(' "$RUNNER_TEMP/veni-restore-filtered.toc"
+          grep -q '^;[0-9].* ACL .*pg_reload_conf' "$RUNNER_TEMP/veni-restore-filtered.toc"
+          docker run --rm --network host \
+            -v "$RUNNER_TEMP:/venibackup:ro" postgres:17 \
+            pg_restore --no-owner --exit-on-error --single-transaction \
+              --use-list=/venibackup/veni-restore-filtered.toc \
+              --dbname="$RESTORED_DB_URL" /venibackup/veni-integrated-disposable-full.dump
+
+          node website/tests/integration/verify-integrated-restored-clone.mjs
+          # Backup remains runner-private, never uploaded as a workflow artifact.
+      - name: Stop local Reserve SOURCE
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/integrated-auth-source
+        run: supabase stop
+      - name: Stop local Website TARGET
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/integrated-auth-target
+        run: supabase stop
