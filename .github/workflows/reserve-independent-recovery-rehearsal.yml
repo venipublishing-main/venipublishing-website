@@ -142,6 +142,22 @@ jobs:
             pg_dump --format=custom --no-owner \
               --exclude-table-data=vault.secrets --dbname="$TARGET_DB_URL" > "$BACKUP_FILE"
           test -s "$BACKUP_FILE"
+          # pg_dump excludes cluster-global roles. The application has one
+          # tightly constrained NOLOGIN/NOINHERIT execution role referenced by
+          # restored policies and SECURITY DEFINER functions. Provision only
+          # that reviewed role on the THIRD disposable server, never platform
+          # roles or hosted credentials.
+          psql "$RECOVERY_DB_URL" -X -v ON_ERROR_STOP=1 -c \
+            'CREATE ROLE reserve_settings_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;'
+          psql "$TARGET_DB_URL" -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT format('ALTER FUNCTION %I.%I(%s) OWNER TO reserve_settings_executor;',
+              n.nspname,p.proname,pg_get_function_identity_arguments(p.oid))
+            FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+            WHERE n.nspname IN ('reserve','reserve_internal','public')
+              AND pg_get_userbyid(p.proowner)='reserve_settings_executor'
+            ORDER BY n.nspname,p.proname;" \
+            > "$RUNNER_TEMP/veni-recovery-function-owners.sql"
+          test -s "$RUNNER_TEMP/veni-recovery-function-owners.sql"
           psql "$RECOVERY_DB_URL" -X -v ON_ERROR_STOP=1 \
             -c 'CREATE DATABASE veni_restored_ci TEMPLATE template0;'
           docker run --rm --network host -i postgres:17 \
@@ -161,6 +177,10 @@ jobs:
             pg_restore --no-owner --exit-on-error --single-transaction \
               --use-list=/venibackup/veni-recovery-filtered.toc \
               --dbname="$RECOVERY_CLONE_DB_URL" /venibackup/veni-independent-recovery.dump
+          # --no-owner deliberately avoids replaying platform ownership; apply
+          # only the reviewed app role's function ownership from source.
+          psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f "$RUNNER_TEMP/veni-recovery-function-owners.sql"
           node website/tests/integration/verify-independent-supabase-recovery.mjs
       - name: Boot independent recovered GoTrue using original cloned Auth records
         run: |
