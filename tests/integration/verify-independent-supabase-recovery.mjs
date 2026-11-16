@@ -105,6 +105,7 @@ if(phase==='database'){
   const executionRole=`SELECT json_build_object('login',rolcanlogin,
     'superuser',rolsuper,'bypass_rls',rolbypassrls,'inherit',rolinherit,
     'create_db',rolcreatedb,'create_role',rolcreaterole,
+    'role_config',rolconfig,
     'postgres_member',(SELECT count(*) FROM pg_auth_members m
       WHERE m.roleid=r.oid AND m.member='postgres'::regrole))::text
     FROM pg_roles r WHERE rolname='reserve_settings_executor';`;
