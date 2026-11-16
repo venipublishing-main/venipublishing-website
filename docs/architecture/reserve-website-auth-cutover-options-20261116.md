@@ -1,0 +1,51 @@
+# Reserve → Website: Auth identity, deletion, and cutover options
+
+**2026-11-16 · Draft research and disposable-only experiments · NOT permission to deploy**
+
+## Current decision
+
+- The Website Supabase project is the intended **destination** and the canonical Veni Account provider.
+- Reserve remains the **source** and must not be stopped, deleted, redirected, or mutated during these rehearsals.
+- No hosted database, Auth account, Edge Function, or environment variable is changed by draft PRs #2, #4, or #5.
+- An earlier **read-only hosted** inventory saw 5 Reserve Auth users, 1 Website Auth user, 2 Reserve tenants, and no matching user IDs or emails. These numbers can change; re-run all inventories before approving any cutover.
+
+## What independent local GoTrue projects actually establish
+
+The `reserve-dual-auth-handoff.yml` GitHub Action uses **two real, separately configured, disposable local Supabase Auth and database instances**, rather than mocked JWT claims.
+
+1. Registering the same synthetic email in each local project produces different account UUIDs. Equal email addresses are not sufficient evidence for merging accounts.
+2. A Reserve-issued JWT and refresh token are rejected by the Website Auth project when the signing secrets are independent.
+3. Creating a new Website account does not silently grant access with the existing Reserve password; an explicit linking/reauthentication mechanism would be needed.
+4. A **selective Auth row import** is a different technique: transfer a synthetic source `auth.users` record and its `auth.identities` records into a Website database that already contains a separate user. If the schema versions match, this *may* retain the source UUID and encrypted password while preserving existing Website users. This is tested only on two disposable stacks, using no hosted data, identities, credentials, or passwords.
+5. Even if the password hash and UUID transfer correctly, a fresh Website login is required when JWT signing secrets differ. Old sessions and refresh tokens are **not imported**.
+
+Supabase's official Knowledge Base, updated 2026-11-03, confirms that an Auth schema migration can include password hashes; it also explicitly says there is no one-size-fits-all Auth-only script. JWT signing-secret differences invalidate old tokens. See [Migrating Auth Users Between Supabase Projects](https://supabase.com/kb/troubleshooting/migrating-auth-users-between-projects).
+
+## Candidate approaches
+
+| Option | User experience | Identity strategy | Principal risks / gate |
+| --- | --- | --- | --- |
+| A: Compatible selective Auth merge | Users sign in again with their **existing password**; no reset if verification passes | Preserve Reserve UUID and password hash, import required Auth identities | Must prove exact source/destination schema and identity compatibility, handle OAuth/MFA/SSO, verify zero UUID/email/provider collisions, prove rollback. Direct Auth SQL import requires careful review. |
+| B: Website re-registration plus explicit account linking | Users register/re-authenticate for Website; possibly choose a new password | New Website UUID; an audited, proof-of-control mapping reparents Reserve foreign keys | Much wider referential rewrite; linking by email alone is forbidden. Require both-session proof, consent, ownership/audit continuity, replay protection. |
+| C: Full Auth schema replacement | Potentially preserves source passwords and UUIDs | Replaces target Auth dataset with source | **Not acceptable as proposed**: would endanger existing Website users and identities. |
+
+**Working preference:** Evaluate **A** through disposable hash-preserving merge tests first, because it could retain user history and passwords with fewer foreign-key changes. Do not select it for production until compatibility and failure-path gates are complete. Keep **B** as a controlled fallback.
+
+## Deletion and long-term retention are separate problems
+
+The draft `reserve_account_deletion_preflight()` checks only the **current authenticated user's** Reserve ownership/history and returns an explicit status. It cannot delete an account, transfer an organisation, anonymise reservations, or independently decide legal retention. The draft Website Edge integration requires `VENI_SHARED_RESERVE_DELETE_PREFLIGHT=enabled` and fails closed on missing/failed preflight; that flag has **not** been enabled.
+
+Before go-live, design and verify a policy that distinguishes account closure, role removal, owner transfer, retained organisational business records, personal-data minimisation, and any lawful retention under POPIA/other applicable rules. Account deletion must never silently cascade through historical Reserve records. This requires an independent policy/legal review and end-to-end tests.
+
+## Mandatory sign-off gates before any hosted change
+
+1. **Inventory refresh:** compare real hosted Auth `users`, `identities`, `sessions`, MFA/provider configuration, verified emails, UUIDs, roles, and all public foreign keys. Read-only, redacted reports only; do not expose hashes, secrets, personal data, or tokens in Actions logs.
+2. **Strategy review:** prove chosen option works for *every* actual provider/login type and collision case, including Website-owned accounts; document handling of unlinked identities and user consent.
+3. **Source/destination schema compatibility:** compare actual hosted Auth versions, generated columns, constraints, `auth.identities` formats, auth-hook and trigger behaviour, then recreate in disposable databases.
+4. **Deep data reconciliation:** tenant memberships, permissions, invitations, audit rows, foreign-key integrity, history, ownership, and Website profiles must survive import.
+5. **Security regression:** real Auth, JWT rejection, re-login, tenant isolation, RLS, permissions, owner deletion, negative email collision and fail-closed cases.
+6. **Backup, rollback, and write-freeze:** independently restorable destination and source backups, deterministic replay, rehearsal of failed import and recovery, defined freeze window, and monitoring plan.
+7. **Website acceptance:** Ian signs off on genuine end-user walkthroughs, including normal and failure flows.
+8. **Explicit cutover authorization:** separate approval **after** gates 1–7; only then schedule hosted migration, switch app configuration, monitor, and much later consider retiring Reserve.
+
+**No-Go:** The old Reserve Supabase project must remain intact and available for recovery. Creating drafts, running synthetic CI, or approving a schema does not authorize production import or source shutdown.
