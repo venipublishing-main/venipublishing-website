@@ -93,6 +93,21 @@ if(phase==='database'){
     WHERE c.relkind IN ('r','p','v','m','S')
     AND n.nspname IN ('public','reserve','reserve_internal');`;
   assert.deepEqual(json(clone,owners),json(source,owners),'App object owner drift');
+  const functionOwners=`SELECT coalesce(json_agg(json_build_object(
+    'schema',n.nspname,'name',p.proname,
+    'arguments',pg_get_function_identity_arguments(p.oid),
+    'owner',pg_get_userbyid(p.proowner),'definer',p.prosecdef)
+    ORDER BY n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)),
+    '[]'::json)::text FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname IN ('public','reserve','reserve_internal');`;
+  assert.deepEqual(json(clone,functionOwners),json(source,functionOwners),
+    'Function owner or SECURITY DEFINER drift across servers');
+  const executionRole=`SELECT json_build_object('login',rolcanlogin,
+    'superuser',rolsuper,'bypass_rls',rolbypassrls,'inherit',rolinherit,
+    'create_db',rolcreatedb,'create_role',rolcreaterole)::text FROM pg_roles
+    WHERE rolname='reserve_settings_executor';`;
+  assert.deepEqual(json(clone,executionRole),json(source,executionRole),
+    'Restricted settings role missing or weakened on independent cluster');
   // PostgreSQL role OIDs may differ between servers: compare role *names*,
   // excluding redundant owner self-grants, not raw OIDs.
   const grants=`WITH grants AS (
