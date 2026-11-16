@@ -1,0 +1,90 @@
+# Reserve-first shared Supabase prototype — M1 + M2.1 previews
+
+**Status: LOCAL-ONLY, unmerged proposal. No live database changes.**  
+Date: 15 November 2026. Owner: Veni Publishing.
+
+## Product hierarchy
+
+The **Veni Publishing website is the parent portal**, with the single Veni Account Layer serving all Spheres. Veni Flow contains Reserve and Performance; Arcana and other Spheres are siblings of Flow. The Supabase project is shared backend infrastructure, **not** the visible parent of the website. This implements the ratified DEC-013 interface direction without collapsing independent repos or deployments.
+
+## Aim and boundaries
+
+Destination eventually: existing Veni Publishing Supabase `droslqfcazwkwvqlbtsq`; do not create a fourth project or pay for a new plan. Source: Reserve staging `opjgaepryqwmsohtajja`. Performance `tdiiuqbagclwknlmdlfb` remains paused and excluded.
+
+Two generators provide an **offline preflight** of the three Reserve M1 migrations actually deployed to staging and the later M2.1 business-settings migration merged into Reserve `main` (but not yet hosted at the audit). They produce four reviewable SQL previews for `reserve.*`, `reserve_internal.*` and two bounded `public.reserve_*` RPCs, preserving the existing website's accounts/Arcana. Neither generator connects to Supabase or runs SQL.
+
+It still intentionally excludes Reserve's **unmerged** PRs #20 and #22 (and their stacked prerequisite branches). Those must be reconciled and integrated in order, in coordination with ongoing Reserve development, before any complete migration can proceed.
+
+## Repeatable developer procedure
+
+1. Check out `venipublishing-main/venipublishing-website` and `venipublishing-main/veni-reserve` in adjacent folders. Verify all four pinned SQL Git blob digests and fail on drift. M2.1 `20261103160923_tenant_business_settings.sql` is pinned to `bdca9ea088e2b48095fac38ad5ef728f086042d3`.
+2. In the **website** repository, run `node --test tests/merge-reserve-m1.test.mjs tests/merge-reserve-m2.test.mjs` (only built-in Node libraries; no packages or credentials).
+3. Run `node scripts/merge-reserve-m1.mjs --reserve-root ../veni-reserve --out-dir ../reserve-merger-preview` followed by `node scripts/merge-reserve-m2.mjs --reserve-root ../veni-reserve --out-dir ../reserve-merger-preview`. This produces four `preview-*.sql` files **outside** `supabase/migrations`. The output directory must not already contain those filenames, to avoid accidental overwrite.
+4. Read the generated SQL diff, especially RLS policies, helpers and privileges. Run in a disposable **local** PostgreSQL/Supabase integration stack against a faithful copy of the website schema. The generator's static tests are **not database execution tests**.
+5. Confirm `public.profiles`, `public.products`, `public.entitlements` and all `public.arcana_*` tables are unchanged. Run tenant A/B cross-read/write-denial, authenticated/anonymous/revoked-access checks, owner/audit invariants, and the original Reserve pgTAP suite. Check `auth.users` linkage and deletion behavior.
+6. Only once the full pipeline is green, use the installed **Supabase CLI's current `--help`** to create a real versioned migration via `supabase migration new ...` and compare its contents against the reviewed preview. CLI v3 changed defaults in November 2026. Keep this initial PR draft until verified.
+
+## Automated disposable PostgreSQL rehearsal
+
+The draft PR contains an **actual PostgreSQL 17 GitHub Actions integration job**, not only static SQL checks. It loads the pinned website foundation, website sign-up/RPC hardening and Arcana pilot, applies three Reserve M1 previews, seeds two synthetic owners and then applies the M2.1 preview. It uses a minimal mock `auth` schema instead of connecting to a hosted Supabase project. CI asserts website count/digest preservation, namespace boundaries, all M1 and M2.1 RLS-enabled tables, Owner A/B separation, the new restricted settings role, anonymous access denial, strict Auth claim agreement, initial save, immutable revision journal, stale-revision rejection and the known direct-account-deletion blocker.
+
+The second CI step specifically rehearses **future Reserve extraction**:
+
+1. Before creating the extraction target, perform a **rollback-only** rehearsal of dropping Reserve's two domain schemas, public Reserve adapters and custom settings execution role, while checking website account/Arcana persistence. The role-drop step must run before creating the second database because PostgreSQL roles are **cluster-global** on the disposable CI server.
+2. Create a second disposable PostgreSQL database with only the required Auth identity surface and two synthetic identity UUIDs.
+3. Dump only `reserve` and `reserve_internal` from the simulated shared database, including schema, data, policies, functions, grants, role-bound ownership, settings records and history, and restore to the second database.
+4. Check that neither website accounts nor Arcana tables were imported and re-test tenants, roles, settings history, security-function owner and RLS. The separate database shares CI cluster-global roles but has independent tables and schemas.
+
+This is a **database-domain reversibility proof**, not a complete Supabase-to-Supabase production migration. In particular, schema-only `pg_dump` deliberately does not include the two `public.reserve_*` RPC adapters or cluster-global custom roles. A real extraction must recreate and verify those from reviewed migrations, plus handle Supabase Auth identities and account deletion, Storage buckets, Edge Functions, API/schema configuration, secrets, domains, operational services, files, production data ownership/consent and client redirects. The original Reserve project is retained throughout the prototype.
+
+## Safety choices in conversion
+
+- Only the eight allowlisted Reserve `public.*` relations become `reserve.*`; new `public.*` references halt the generator for human review.
+- Reserve's `private.*` functions and invitation tables become `reserve_internal.*`. This schema is not exposed by the Data API.
+- The original M1.2 `REVOKE CREATE ON SCHEMA public` is retargeted to **`reserve`**, to avoid silently changing the website's privileges.
+- M1.2's ownership guard and column-grant cleanup inspect **only** `reserve` and `reserve_internal`, not the website's `public` tables.
+- The `reserve` schema is **not** added to Supabase's exposed API schemas. No generic Data API reads/writes become available through these scripts. M2.1 does introduce two deliberately scoped, capability-checked `public.reserve_*` RPC adapters for reading and saving business settings, with no direct table exposure.
+- M2.1 remaps all new `private.*` tables, functions and wire types into `reserve_internal.*`. Its cluster-global `veni_settings_executor` role becomes the Sphere-specific `reserve_settings_executor`, with `NOLOGIN`, `NOBYPASSRLS` and `NOINHERIT`. The privileged business-settings writer must remain owned by this role; restoring it under `postgres` would bypass intended RLS.
+- The conversion preserves original trigger and RLS logic; its semantic correctness still needs execution against local PostgreSQL, particularly privilege ownership and `SECURITY DEFINER` behavior.
+- A standalone Reserve `reserve.users.id` FK still points to the **destination** `auth.users(id)`; cross-project Auth UUID mapping and the website's direct user-deletion Edge Function remain explicit blockers for hosted cutover.
+
+## Forward dependency audit — NOT imported
+
+The next unmerged Reserve code is deliberately **not** included in this prototype:
+
+1. **Draft PR #16** (standalone SSR preview) provides a prerequisite application/session layer, not a completed Veni-wide session integration.
+2. **Draft PR #20**, stacked on #16, adds `20261113111616_tenant_bootstrap.sql`, a genuine-session tenant bootstrap, local authenticated setup flows and the `veni_bootstrap_executor` role. It references `auth.sessions` and additional `auth.users` lifecycle fields which the current lightweight PostgreSQL Auth mock does **not** model. Its `public.current_reserve_user`, `public.bootstrap_setup_tenant` and `public.list_setup_tenants` functions will require reviewed Reserve-prefixed endpoints and a role namespace. **Do not infer that the M1/M2.1 CI proves this later real-session behavior.**
+3. **Draft PR #22**, stacked on #20, adds `20261114110626_theme_revisions_private_drafts.sql`, a `veni_theme_executor` role, private Theme revisions and more public RPCs. The owner's browser acceptance and a production Theme API contract remain outstanding. It is not eligible for shared-backend import until its prerequisites and owner review are settled.
+
+The unifying rule remains **one Veni Account and one canonical Supabase Auth user ID**, with Reserve membership/tenant records associated with that ID. Reserve's UI may remain a separate deployment, but it must use the parent Veni identity and explicit Sphere entitlements; it must never silently create a second independent identity. The next safe slice after the real-Auth data/API test is **browser SSR/PKCE and session-aware authorization**, followed by tenant bootstrap and account deletion. This is a design gate, not authority for a live migration.
+
+## Genuine Supabase Auth and PostgREST smoke — functional PASS, release BLOCKED
+
+The separate `real-auth-postgrest` CI job starts a **disposable loopback Supabase Auth + PostgREST + PostgreSQL** stack. It creates three actual GoTrue users and sessions, applies the shared website/Arcana/Reserve preview schemas, and seeds two owners using their genuine `auth.users.id` values. A deliberately forged user-metadata role/tenant claim provides no tenant access. The same canonical UUID accesses the website profile, that user's private Arcana readings and the owner's Reserve tenant. Cross-user and cross-tenant read attempts, anonymous settings access and stale-revision writes are rejected. Global logout rejects the refresh token, and a new login retains the same Auth UUID and tenant association. The first successful run was [GitHub Actions #43679890401](https://github.com/venipublishing-main/venipublishing-website/actions/runs/43679890401), SHA `9d8ca1e052bb481bd3f5156af76828a1db831250`.
+
+**Important security finding:** a previously issued *access* JWT can still authorize operations after global sign-out until it expires. The first run confirmed this for Reserve settings. The tightened smoke probes the signed-out token across **Reserve settings, website profile and Arcana private readings**, emits an explicit GitHub Actions warning and writes a release-blocker summary. A green functional CI job **is not** approval to deploy. Supabase's token sign-out semantics require server-side live-session checks for sensitive cross-Sphere operations; simply revoking a refresh token does not immediately invalidate a signed JWT. Draft Reserve PR #20 already demonstrates an `auth.sessions`-aware guard, but must be reviewed alongside its SSR prerequisite #16 and adapted consistently for the website and other Spheres, not copied wholesale from its draft.
+
+**Reproduced and mitigated locally:** [Actions #43680455962](https://github.com/venipublishing-main/venipublishing-website/actions/runs/43680455962) proved the revoked JWT could reach **all three** private surfaces. [Actions #43680846300](https://github.com/venipublishing-main/venipublishing-website/actions/runs/43680846300), SHA `07b92b02512415f73f931fcf2e85b7abac85dcfc`, ran the same tests and then applied the *experimental, disposable-only* `tests/integration/real-auth-revocation-proof.sql`. This adds a restricted security-definer `identity_private.has_live_session()` based on `auth.sessions`, restrictive policies on website/Arcana/Reserve private tables, and checks in Reserve's narrow settings RPC adapters. **After the guard**, the revoked JWT was denied access to private website profile, Arcana reading/read-write and Reserve tenant/settings data; another user's active session remained valid, and the original user could re-login with the original UUID and recover all three Spheres. Both CI jobs passed. **The mitigation is not a reviewed production migration**; security review, attack testing and full policy inventory are still required.
+
+The parent website currently runs as **static GitHub Pages** at `venipublishing.co.za`, with Supabase Auth sessions in browser storage. Reserve's upstream draft #16 is an **isolated SSR preview, not a shared login implementation**. Different origins do not automatically share local-storage sessions. Seamless cross-Sphere navigation therefore needs a separate reviewed SSR/PKCE/cookie or centralized session-handoff design, with origin checks and CSRF defenses. Keeping the same Supabase Auth project solves **identity unification**, but does not by itself solve **single sign-on UX**.
+
+Release blockers before any hosted shared-backend cutover:
+
+1. Establish browser SSR/PKCE cookie, login, logout and Sphere-navigation flows using the **parent Veni Account**; test session fixation, CSRF and cross-Sphere sign-out.
+2. Implement and test `auth.sessions`-aware revocation checks and account-ban/deletion checks for sensitive website, Arcana and Reserve authorization paths, including endpoint/RLS privilege audit.
+3. Repair direct account deletion and tenant-ownership handling: the staged `reserve.users` foreign key currently restricts deletion of `auth.users`.
+4. Re-run adversarial cross-tenant access, user-metadata spoofing, RLS/security-advisor checks and reliable account restore/re-login tests after the guard.
+5. Keep all actions preview-only until Ian separately authorizes an explicit hosted migration and a rollback/backup drill.
+
+## Definition of done for this preview
+
+- [x] Generator test suites pass locally: ten checks across M1 and M2.1.
+- [x] Exact hosted M1 and merged-main M2.1 source digests pass and all four SQL previews generate.
+- [ ] Manual diff shows no website `public` grants, schemas, tables or account triggers affected.
+- [x] Disposable PostgreSQL 17 CI database applies all four previews; website account/Arcana, tenant separation, bounded settings RPC and constrained execution-role smoke checks pass. This is **not** a Supabase security-advisor pass.
+- [x] Disposable **genuine Supabase Auth + PostgREST** CI job proves shared website/Arcana/Reserve identity, tenant isolation and refresh-token revocation. **Its stale-access-JWT finding is a release blocker**, notwithstanding a green functional test.
+- [ ] Reserve original database tests and website account/Arcana regressions pass.
+- [ ] Test tenant identity mapping, account deletion and SSR sign-in are addressed in follow-on work; CI reverse-extraction drill is only a database-domain rehearsal.
+- [ ] Ian separately approves any *hosted* Supabase migration/cutover. Not granted by this preview PR.
+
+Canonical design: [Unified Supabase Merger Blueprint v0.1](https://docs.google.com/document/d/1SF0VqLmbFcXHVYVRza5CWTTLc9L_4iiMwR98Mq6Fz08/edit). Sources: [Reserve repo](https://github.com/venipublishing-main/veni-reserve), [Supabase custom schemas](https://supabase.com/docs/guides/api/using-custom-schemas), and [API security](https://supabase.com/docs/guides/api/securing-your-api).

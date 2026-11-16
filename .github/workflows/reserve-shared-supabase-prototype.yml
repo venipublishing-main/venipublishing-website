@@ -1,0 +1,192 @@
+name: Reserve shared Supabase prototype (local Postgres only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-shared-supabase-prototype.yml'
+      - 'scripts/merge-reserve-m1.mjs'
+      - 'scripts/merge-reserve-m2.mjs'
+      - 'tests/merge-reserve-m1.test.mjs'
+      - 'tests/merge-reserve-m2.test.mjs'
+      - 'tests/integration/**'
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: veni_merge_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd=pg_isready
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: veni_merge_ci
+      PGUSER: postgres
+      PGPASSWORD: local_ci_only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: ecb6b23fc4ee8ec15fbb6074a3e347f87f3d0555
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301
+          path: website-preview
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify pinned Reserve inputs and static conversions
+        run: |
+          node --test website/tests/merge-reserve-m1.test.mjs website/tests/merge-reserve-m2.test.mjs
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-merge-preview"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-merge-preview"
+      - name: Verify local PostgreSQL schema and two-tenant RLS
+        run: |
+          psql --version
+          psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/mock-supabase-auth.sql \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f website/tests/integration/website-before-reserve.sql \
+            -f "$RUNNER_TEMP/reserve-merge-preview/preview-1-m1a.sql" \
+            -f "$RUNNER_TEMP/reserve-merge-preview/preview-2-m1b.sql" \
+            -f "$RUNNER_TEMP/reserve-merge-preview/preview-3-m12.sql" \
+            -f website/tests/integration/shared-backend-verify.sql
+      - name: Verify Reserve M2.1 settings RPC and audit journal
+        run: |
+          psql -X -v ON_ERROR_STOP=1 \
+            -f "$RUNNER_TEMP/reserve-merge-preview/preview-4-m21.sql" \
+            -f website/tests/integration/reserve-business-settings-verify.sql
+      - name: Prove Reserve-only extraction and reversible removal
+        run: |
+          # First simulate complete Reserve removal from the original shared
+          # database. A PostgreSQL role is cluster-global, so dropping it must
+          # precede creation of the extracted database on this CI server.
+          # The SQL drill rolls back the entire removal, including the role.
+          psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/website-after-reserve-removal-drill.sql
+
+          # A clean, second database represents a future standalone Reserve.
+          createdb veni_reserve_extract_ci
+          PGDATABASE=veni_reserve_extract_ci psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/mock-supabase-auth.sql
+          PGDATABASE=veni_reserve_extract_ci psql -X -v ON_ERROR_STOP=1 \
+            -c "insert into auth.users (id, email) values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'owner-a@example.invalid'), ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'owner-b@example.invalid')"
+
+          # Use the PostgreSQL 17 server container's own dump/restore tools,
+          # regardless of the client version installed on the GitHub runner.
+          docker exec "${{ job.services.postgres.id }}" \
+            pg_dump -U postgres -d veni_merge_ci --format=custom \
+              --schema=reserve --schema=reserve_internal \
+              > "$RUNNER_TEMP/reserve-only.dump"
+          docker exec -i "${{ job.services.postgres.id }}" \
+            pg_restore -U postgres -d veni_reserve_extract_ci \
+              < "$RUNNER_TEMP/reserve-only.dump"
+
+          PGDATABASE=veni_reserve_extract_ci psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/extracted-reserve-verify.sql
+
+  # Separately exercise the real Supabase GoTrue/Auth and PostgREST services.
+  # This does NOT import the unfinished Reserve PR #16/#20/#22 application
+  # features. No linked project, hosted credentials, or remote commands exist.
+  real-auth-postgrest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: ecb6b23fc4ee8ec15fbb6074a3e347f87f3d0555
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301
+          path: website-preview
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3 action commit
+        with:
+          version: 3.0.0
+      - name: Verify CLI invocation and generate pinned Reserve SQL
+        run: |
+          supabase --version
+          supabase start --help
+          supabase status --help
+          node --check website/tests/integration/real-auth-smoke.mjs
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-merge-auth"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-merge-auth"
+      - name: Start disposable Supabase Auth + PostgREST on loopback only
+        working-directory: website/tests/integration/real-auth-stack
+        run: |
+          # PostgREST requires every configured exposed schema to exist at
+          # startup. Use the CLI migration generator for the disposable CI
+          # bootstrap; real Reserve M1 DDL still applies later unchanged.
+          supabase migration new reserve_api_schema_bootstrap
+          shopt -s nullglob
+          bootstrap_files=(supabase/migrations/*_reserve_api_schema_bootstrap.sql)
+          test "${#bootstrap_files[@]}" -eq 1
+          cp ../real-auth-schema-bootstrap.sql "${bootstrap_files[0]}"
+          supabase start -x studio,realtime,storage,imgproxy,edge-runtime
+          supabase status -o env > "$RUNNER_TEMP/local-supabase.env"
+      - name: Apply website, Arcana and Reserve SQL to local Auth stack and test HTTP sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/local-supabase.env"
+          set +a
+          # A locally running database is mandatory; do not use a linked/remote project.
+          case "$DB_URL" in
+            postgresql://*@127.0.0.1:54322/postgres|postgres://*@127.0.0.1:54322/postgres) ;;
+            *) echo 'Refusing non-local database URL'; exit 1 ;;
+          esac
+          case "$API_URL" in
+            http://127.0.0.1:54321|http://localhost:54321) ;;
+            *) echo 'Refusing non-local Supabase API URL'; exit 1 ;;
+          esac
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f "$RUNNER_TEMP/reserve-merge-auth/preview-1-m1a.sql" \
+            -f "$RUNNER_TEMP/reserve-merge-auth/preview-2-m1b.sql" \
+            -f "$RUNNER_TEMP/reserve-merge-auth/preview-3-m12.sql" \
+            -f "$RUNNER_TEMP/reserve-merge-auth/preview-4-m21.sql"
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
+          node website/tests/integration/real-auth-smoke.mjs
+      - name: Stop disposable Supabase services
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/real-auth-stack
+        run: supabase stop

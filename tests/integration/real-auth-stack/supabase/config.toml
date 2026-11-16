@@ -1,0 +1,27 @@
+# Disposable, loopback-only Supabase CLI project for shared Veni/Reserve CI.
+# No [remotes] or hosted project reference may be added to this fixture.
+project_id = "veni_shared_auth_ci"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "reserve"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = []
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enabled = true
+# CI only: generate immediately usable sessions; hosted projects may require
+# verification and will be audited separately before any migration.
+enable_confirmations = false
