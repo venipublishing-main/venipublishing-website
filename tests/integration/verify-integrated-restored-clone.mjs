@@ -1,5 +1,5 @@
-// Compare a FULL PostgreSQL logical dump restored into a separate, clean DB
-// on the disposable Website stack. No hosted URLs; no sensitive rows logged.
+// Compare a PostgreSQL logical dump (excluding protected vault.secrets data)
+// restored to a clean DB on the disposable Website stack. No hosted URLs.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 
@@ -100,7 +100,7 @@ assert.equal(psql(after,`SELECT tgenabled FROM pg_trigger
  WHERE tgrelid='reserve.audit_events'::regclass AND tgname='audit_guard';`),'O',
  'Immutable audit guard must remain enabled');
 
-console.log('PASS: full PostgreSQL dump restored to a separate clean database');
+console.log('PASS: PostgreSQL application/Auth/Storage metadata dump restored to a separate clean database (Vault secret data intentionally excluded)');
 console.log(`PASS: ${originalTables.length} Auth/Website/Reserve/Storage table datasets match exactly`);
 console.log('PASS: RLS settings, policies, application triggers, owner access, audit and deletion guard restored');
 console.log('GATE OPEN: global roles, external Storage object bytes, Vault/root keys, Edge secrets, and GoTrue login against the clone still require separate evidence');
