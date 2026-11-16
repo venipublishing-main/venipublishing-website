@@ -113,7 +113,7 @@ jobs:
             -f website/tests/integration/reserve-account-deletion-preflight-prototype.sql
           psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
           node website/tests/integration/real-auth-reserve-integrated-rehearsal.mjs
-      - name: Restore full disposable Website logical backup into clean local database
+      - name: Restore disposable Website logical backup (excluding protected Vault data)
         run: |
           set -euo pipefail
           set -a
@@ -125,8 +125,13 @@ jobs:
 
           umask 077
           BACKUP_FILE="$RUNNER_TEMP/veni-integrated-disposable-full.dump"
+          # vault.secrets is an extension-managed, protected secrets store. A
+          # normal PostgreSQL restore cannot write it, even on this local stack.
+          # Secret/key recovery is a separate production cutover gate; never
+          # bypass Vault permissions or include secret payloads in CI artifacts.
           docker run --rm --network host postgres:17 \
-            pg_dump --format=custom --no-owner --dbname="$TARGET_DB_URL" > "$BACKUP_FILE"
+            pg_dump --format=custom --no-owner \
+              --exclude-table-data=vault.secrets --dbname="$TARGET_DB_URL" > "$BACKUP_FILE"
           test -s "$BACKUP_FILE"
 
           # A new empty database on the SAME disposable PostgreSQL cluster.
