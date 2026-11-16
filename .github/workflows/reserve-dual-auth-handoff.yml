@@ -1,0 +1,86 @@
+name: Reserve to Website dual GoTrue handoff (local stacks only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-dual-auth-handoff.yml'
+      - 'tests/integration/dual-auth-source/**'
+      - 'tests/integration/dual-auth-target/**'
+      - 'tests/integration/real-dual-auth-handoff.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  independent-local-auth-projects:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      VENI_DUAL_AUTH_DISPOSABLE: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3 action commit
+        with:
+          version: 3.0.0
+      - name: Verify current experimental local-stack commands
+        run: |
+          set -euo pipefail
+          supabase --version
+          node --check website/tests/integration/real-dual-auth-handoff.mjs
+          cd website/tests/integration/dual-auth-source
+          supabase stack --help
+          supabase start --help
+          supabase status --help
+      - name: Start isolated Reserve source GoTrue and PostgREST
+        working-directory: website/tests/integration/dual-auth-source
+        run: |
+          set -euo pipefail
+          # All config files omit fixed ports and contain no hosted references.
+          supabase start --exclude studio,mail,realtime,storage,functions,analytics --eager
+          supabase status --env --output-format text > "$RUNNER_TEMP/veni-source-local.env"
+      - name: Start isolated Website target GoTrue and PostgREST
+        working-directory: website/tests/integration/dual-auth-target
+        run: |
+          set -euo pipefail
+          supabase start --exclude studio,mail,realtime,storage,functions,analytics --eager
+          supabase status --env --output-format text > "$RUNNER_TEMP/veni-target-local.env"
+      - name: Verify independent genuine Auth issuers and explicit account reauthentication
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/veni-source-local.env"
+          SOURCE_API_URL="$API_URL"
+          SOURCE_DB_URL="$DB_URL"
+          SOURCE_ANON_KEY="$ANON_KEY"
+          source "$RUNNER_TEMP/veni-target-local.env"
+          TARGET_API_URL="$API_URL"
+          TARGET_DB_URL="$DB_URL"
+          TARGET_ANON_KEY="$ANON_KEY"
+          set +a
+
+          # Public website tables and onboarding trigger exist on the target
+          # before any synthetic target sign-up takes place.
+          case "$TARGET_DB_URL" in
+            postgresql://*@127.0.0.1:[23]*/postgres|postgres://*@127.0.0.1:[23]*/postgres|postgresql://*@localhost:[23]*/postgres|postgres://*@localhost:[23]*/postgres) ;;
+            *) echo 'Refusing non-loopback target DB URL'; exit 1 ;;
+          esac
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql
+          node website/tests/integration/real-dual-auth-handoff.mjs
+      - name: Stop Reserve source local stack
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/dual-auth-source
+        run: supabase stop
+      - name: Stop Website target local stack
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/dual-auth-target
+        run: supabase stop
