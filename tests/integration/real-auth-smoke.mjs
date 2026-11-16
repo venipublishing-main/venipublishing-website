@@ -96,6 +96,24 @@ async function main() {
   assertRows(await success(reserveTenants, { token: c.access_token, profile: 'reserve' }), [], 'Untrusted metadata cannot join Reserve');
   console.log('PASS: website and Reserve resolve the same Auth identities; BOLA denied');
 
+  // Self-only Account Layer deletion preflight. No user UUID is accepted as
+  // input. The RPC is a LOCAL prototype, not a deployed account-deletion fix.
+  const deletionState = (token) => success('/rest/v1/rpc/reserve_account_deletion_preflight', {
+    method: 'POST', token, body: {},
+  });
+  assert.equal(await deletionState(a.access_token), 'OWNER_TRANSFER_REQUIRED',
+    'Reserve owner must not hard-delete a shared Auth identity');
+  assert.equal(await deletionState(b.access_token), 'OWNER_TRANSFER_REQUIRED',
+    'Other tenant owner must not hard-delete a shared Auth identity');
+  assert.equal(await deletionState(c.access_token), 'RESERVE_CLEAR',
+    'Website-only user_metadata cannot pretend to own Reserve');
+  const anonymousPreflight = await request('/rest/v1/rpc/reserve_account_deletion_preflight', {
+    method: 'POST', body: {},
+  });
+  assert.ok(anonymousPreflight.status >= 400,
+    'Anonymous request unexpectedly accessed self-only deletion preflight');
+  console.log('PASS: genuine GoTrue/Auth JWTs enforce self-only Reserve account-deletion preflight');
+
   const cards = await success('/rest/v1/arcana_cards?select=id,slug&status=eq.pilot', { token: a.access_token });
   assert.ok(Array.isArray(cards) && cards.length >= 1, 'Arcana public pilot card unavailable');
   const reading = await success('/rest/v1/rpc/save_arcana_single_card_reading', {
