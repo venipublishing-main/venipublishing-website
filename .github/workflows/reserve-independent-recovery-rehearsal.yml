@@ -227,7 +227,9 @@ jobs:
           docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' \
             "$AUTH_CONTAINER" > "$RUNNER_TEMP/veni-recovery-gotrue.env"
           RECOVERED_JWT_SECRET="$(openssl rand -hex 32)"
-          docker run --rm -d --name veni-recovered-gotrue-ci --network host \
+          # Keep this *disposable* container until cleanup so a failed boot
+          # can be diagnosed without ever printing its private environment.
+          docker run -d --name veni-recovered-gotrue-ci --network host \
             --env-file "$RUNNER_TEMP/veni-recovery-gotrue.env" \
             -e DATABASE_URL="$RECOVERY_CLONE_DB_URL" \
             -e GOTRUE_DB_DATABASE_URL="$RECOVERY_CLONE_DB_URL" \
@@ -237,16 +239,26 @@ jobs:
             -e API_EXTERNAL_URL="$RECOVERED_GOTRUE_URL" \
             -e GOTRUE_DISABLE_SIGNUP=true -e GOTRUE_LOG_LEVEL=error \
             "$AUTH_IMAGE" > "$RUNNER_TEMP/veni-recovered-auth.cid"
+          READY=no
           for attempt in $(seq 1 45); do
-            if curl -fsS "$RECOVERED_GOTRUE_URL/health" >/dev/null 2>&1; then break; fi
+            if curl -fsS "$RECOVERED_GOTRUE_URL/health" >/dev/null 2>&1; then READY=yes; break; fi
+            if [ "$(docker inspect --format '{{.State.Running}}' veni-recovered-gotrue-ci)" != true ]; then break; fi
             sleep 1
           done
-          curl -fsS "$RECOVERED_GOTRUE_URL/health" >/dev/null
+          if [ "$READY" != yes ]; then
+            docker inspect --format 'Recovered GoTrue container: {{.State.Status}} (exit {{.State.ExitCode}})' veni-recovered-gotrue-ci
+            # Only synthetic CI data exists. Sanitize connection strings and
+            # high-entropy material before printing a bounded diagnostic.
+            docker logs veni-recovered-gotrue-ci 2>&1 \
+              | sed -E 's#postgres(ql)?://[^[:space:]]+#postgresql://[REDACTED]#g; s/[A-Za-z0-9_+\/=:-]{32,}/[REDACTED]/g' \
+              | tail -20 || true
+            exit 1
+          fi
           node website/tests/integration/verify-independent-supabase-recovery.mjs
       - name: Stop recovered standalone GoTrue
         if: always()
         continue-on-error: true
-        run: docker stop veni-recovered-gotrue-ci
+        run: docker rm -f veni-recovered-gotrue-ci
       - name: Stop third local Supabase stack
         if: always()
         continue-on-error: true
