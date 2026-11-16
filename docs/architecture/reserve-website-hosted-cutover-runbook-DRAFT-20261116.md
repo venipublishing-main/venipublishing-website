@@ -33,6 +33,10 @@ The destination is the existing Website project (`droslqfcazwkwvqlbtsq`); the so
 
 **Known local-recovery limitations (identified in CI):** A direct whole-database `pg_restore` under the normal local database login was refused permission to write `vault.secrets`, modify the protected `extensions.pg_stat_statements_reset` and `pg_catalog.pg_reload_conf` grants, and set default privileges owned by `supabase_admin`. The disposable recovery experiment excludes the Vault ciphertext payload and Supabase-owned privileges rather than elevating permissions; the operator must independently provision and verify equivalent platform configuration in a future cross-project staging rehearsal. The continued application-record, policies, roles and data checks do **not** imply these protected assets have been recovered.
 
+**Independent-cluster rehearsal (draft PR #6, 2026-11-16):** [CI run #43848145142](https://github.com/venipublishing-main/venipublishing-website/actions/runs/43848145142) recovered the same **47 synthetic application/Auth/Storage-metadata table datasets** onto a *third physical PostgreSQL instance*, reconciled row fingerprints, RLS, policies, triggers, grants, restricted custom-role properties, security-definer ownership, tenant access, audit protection and deletion preflight. Because custom Postgres roles are cluster-global, the restore first recreated the least-privilege `reserve_settings_executor` and temporarily granted/revoked `SET ROLE` plus private-schema `CREATE` to restore original function ownership; it verified no elevated membership remained.
+
+**Auth-specific caveat:** Fresh password logins for all six original synthetic UUIDs succeeded on the third **native** Supabase GoTrue service after importing the six recovered `auth.users`/`auth.identities` records into its compatible Auth database. Old target-issued JWTs were rejected. A standalone GoTrue process starting **directly on the full cloned database** instead hit an OAuth migration incompatibility; direct full-clone Auth service startup is **not proven**, and cannot be assumed for hosted disaster recovery. Retest it with reviewed source/destination Auth versions and provider settings. Neither this synthetic recovery nor a green Actions badge satisfies Gate B for real hosted snapshots, Storage files, encryption keys or project configuration.
+
 **Gate B:** record the measured backup and restore times, the actual recovery point and timeout, and independent verifier signoff. A green synthetic CI result does not satisfy this hosted gate.
 
 ## 3. Freeze and import — only during a separately approved window
@@ -70,7 +74,9 @@ The destination is the existing Website project (`droslqfcazwkwvqlbtsq`); the so
 | Real hosted schema/Auth inventory | 2026-11-16 read-only audit; 5 source and 1 destination accounts, 10 M1 tables | **Historical snapshot; must refresh** |
 | Synthetic Auth + full M1 domain import | Two independent local GoTrue stacks, preservation/rollback/RLS passed in PR #5 | **Passed in CI only** |
 | PostgreSQL application/Auth/Storage metadata and rows restored to clean database | [CI run #43839340829](https://github.com/venipublishing-main/venipublishing-website/actions/runs/43839340829): 47 datasets, RLS/policies, object owners, grants to other roles, triggers and deletion guard; same disposable cluster; Vault secret data excluded | **Passed locally; hosted proof open** |
-| Cross-cluster backups plus role, configuration and Vault recovery | No independent hosted/staging recovery proof | **Open** |
+| Independent-cluster synthetic database recovery | [CI run #43848145142](https://github.com/venipublishing-main/venipublishing-website/actions/runs/43848145142): 47 tables, restricted role recreation, application function owners, policies/RLS and deletion protections matched on third PostgreSQL server | **Passed in disposable CI only** |
+| Independent third-stack Auth credential continuity | Same run: six recovered synthetic identities signed in via third native GoTrue with original UUID/password; old Website JWT rejected | **Passed via compatible Auth catalogue; direct full-clone startup open** |
+| Real hosted/staging backups, Auth service restart, configuration and Vault recovery | Not independently restored; standalone full-clone GoTrue exposed OAuth migration incompatibility | **Open / no-go** |
 | Storage object bytes and newly deployed bookings | Not covered by M1 fixture; must inventory | **Open** |
 | Hosted data migration and end-user signoff | Not conducted, not authorised | **Open** |
 | Reserve hosted project closure | Explicitly excluded | **Not authorised** |
@@ -81,3 +87,4 @@ The destination is the existing Website project (`droslqfcazwkwvqlbtsq`); the so
 - Draft PR #2: <https://github.com/venipublishing-main/venipublishing-website/pull/2>
 - Draft PR #4: <https://github.com/venipublishing-main/venipublishing-website/pull/4>
 - Draft PR #5: <https://github.com/venipublishing-main/venipublishing-website/pull/5>
+- Draft PR #6: <https://github.com/venipublishing-main/venipublishing-website/pull/6>

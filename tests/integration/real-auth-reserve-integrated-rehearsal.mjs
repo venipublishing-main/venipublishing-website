@@ -3,7 +3,7 @@
 // mocked JWTs. No hosted project references, no production import capability.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -317,4 +317,18 @@ assert.equal(scalar(source.db,'SELECT count(*) FROM auth.users;'),'5');
 assert.equal(scalar(source.db,'SELECT count(*) FROM public.tenants;'),'2');
 assert.equal(scalar(source.db,'SELECT count(*) FROM public.audit_events;'),'2');
 console.log('PASS: source Reserve unchanged, all 5 imported passwords work without resets; target has 1 original Website account');
+if (process.env.VENI_EXPORT_SYNTHETIC_RECOVERY_ACCOUNTS === 'yes') {
+  assert.equal(process.env.VENI_CROSS_CLUSTER_RECOVERY,'yes');
+  const path=process.env.VENI_SYNTHETIC_RECOVERY_ACCOUNTS_FILE;
+  assert.ok(path && process.env.RUNNER_TEMP &&
+    path.startsWith(`${process.env.RUNNER_TEMP}/veni-recovery-`),
+  'Only a runner-temporary file may hold synthetic recovery credentials');
+  const safeAccount=(entry)=>({id:entry.id,email:entry.email,password:entry.password});
+  writeFileSync(path,JSON.stringify({
+    website:safeAccount(website),
+    reserve:Object.fromEntries(Object.entries(actors).map(([k,a])=>[k,safeAccount(a)])),
+    oldTargetToken:tokens.owner_a,
+  }),{mode:0o600,flag:'wx'});
+  console.log('PASS: ephemeral synthetic-only recovery credential fixture prepared for isolated CI');
+}
 console.log('GATE OPEN: actual booking tables, live-provider configuration, backup/restore and hosted cutover remain untested');
