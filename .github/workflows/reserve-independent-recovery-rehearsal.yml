@@ -227,8 +227,10 @@ jobs:
           docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' \
             "$AUTH_CONTAINER" > "$RUNNER_TEMP/veni-recovery-gotrue.env"
           RECOVERED_JWT_SECRET="$(openssl rand -hex 32)"
-          # Keep this *disposable* container until cleanup so a failed boot
-          # can be diagnosed without ever printing its private environment.
+          # The Auth catalogue has already been restored and fingerprinted.
+          # Do not replay upstream bootstrap migrations against CLI-managed
+          # oauth_clients tables: this is a recovery/re-login test, not an Auth
+          # schema upgrade. Keep this disposable container for safe diagnostics.
           docker run -d --name veni-recovered-gotrue-ci --network host \
             --env-file "$RUNNER_TEMP/veni-recovery-gotrue.env" \
             -e DATABASE_URL="$RECOVERY_CLONE_DB_URL" \
@@ -237,6 +239,7 @@ jobs:
             -e GOTRUE_API_HOST=127.0.0.1 \
             -e GOTRUE_API_PORT=29587 -e PORT=29587 \
             -e API_EXTERNAL_URL="$RECOVERED_GOTRUE_URL" \
+            -e GOTRUE_DB_AUTOMIGRATE=false \
             -e GOTRUE_DISABLE_SIGNUP=true -e GOTRUE_LOG_LEVEL=error \
             "$AUTH_IMAGE" > "$RUNNER_TEMP/veni-recovered-auth.cid"
           READY=no
