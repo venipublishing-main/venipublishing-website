@@ -140,9 +140,21 @@ jobs:
           export RESTORED_DB_URL
           psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 \
             -c 'CREATE DATABASE veni_restored_ci TEMPLATE template0;'
+
+          # Supabase's pg_stat_statements extension owns a protected reset
+          # function. Its GRANT is platform-managed, not an application grant;
+          # keep all other ACL entries so tenant/Website permissions can be
+          # independently verified. Do not change the protected function.
           docker run --rm --network host -i postgres:17 \
+            pg_restore --list < "$BACKUP_FILE" > "$RUNNER_TEMP/veni-restore-original.toc"
+          awk '/^[0-9]+;/ && / ACL / && /pg_stat_statements_reset\(/ {print ";" $0; next} {print}' \
+            "$RUNNER_TEMP/veni-restore-original.toc" > "$RUNNER_TEMP/veni-restore-filtered.toc"
+          grep -q '^;[0-9].* ACL .*pg_stat_statements_reset(' "$RUNNER_TEMP/veni-restore-filtered.toc"
+          docker run --rm --network host \
+            -v "$RUNNER_TEMP:/venibackup:ro" postgres:17 \
             pg_restore --no-owner --exit-on-error --single-transaction \
-              --dbname="$RESTORED_DB_URL" < "$BACKUP_FILE"
+              --use-list=/venibackup/veni-restore-filtered.toc \
+              --dbname="$RESTORED_DB_URL" /venibackup/veni-integrated-disposable-full.dump
 
           node website/tests/integration/verify-integrated-restored-clone.mjs
           # Backup remains runner-private, never uploaded as a workflow artifact.
