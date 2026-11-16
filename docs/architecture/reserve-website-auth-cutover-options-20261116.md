@@ -7,7 +7,28 @@
 - The Website Supabase project is the intended **destination** and the canonical Veni Account provider.
 - Reserve remains the **source** and must not be stopped, deleted, redirected, or mutated during these rehearsals.
 - No hosted database, Auth account, Edge Function, or environment variable is changed by draft PRs #2, #4, or #5.
-- An earlier **read-only hosted** inventory saw 5 Reserve Auth users, 1 Website Auth user, 2 Reserve tenants, and no matching user IDs or emails. These numbers can change; re-run all inventories before approving any cutover.
+- A fresh **read-only hosted** inventory on 2026-11-16 found 5 Reserve Auth users, 1 Website Auth user, and no matching user IDs or normalised emails. An earlier tenant inventory found 2 Reserve tenants. These numbers can change; re-run all inventories before approving any cutover.
+
+## 2026-11-16 hosted compatibility audit — read-only
+
+| Property | Reserve source | Website destination |
+| --- | --- | --- |
+| Project ref | `opjgaepryqwmsohtajja` | `droslqfcazwkwvqlbtsq` |
+| Health | `ACTIVE_HEALTHY` | `ACTIVE_HEALTHY` |
+| Auth accounts | 5 | 1 |
+| Auth identities | 5 | 1 |
+| Identity providers | 5 email | 1 email |
+| Accounts without password hashes | 0 | 0 |
+| MFA factors | 0 | 0 |
+| Source/Website overlap | 0 user UUID collisions; 0 normalised email collisions | Same cross-project comparison |
+| `auth.users` and `auth.identities` column definitions | Identical fingerprint | Identical fingerprint |
+| Auth user/identity constraints and indexes | Identical fingerprints | Identical fingerprints |
+| Custom trigger on `auth.users` | None | `on_auth_user_created` |
+| Database engine | PostgreSQL 17, patch 17.11 | PostgreSQL 17, patch 17.6 |
+
+The cross-project collision check used one-use salted fingerprints in memory; neither users' email addresses nor the fingerprints were printed or stored in the draft repository. The fingerprints were computed from schema metadata, not password hashes. Website's profile trigger is expected and its behaviour was exercised in the disposable Auth import.
+
+**Interpretation:** Current Auth columns, constraints, and indexes line up exceptionally well for a selective import. Distinct PostgreSQL patch versions, Auth service versions, site-specific triggers, and future schema drift still require independent preflight checks on a later cutover date. Provider/MFA counts describe current records, not all potentially configured authentication methods or dormant sessions.
 
 ## What independent local GoTrue projects actually establish
 
