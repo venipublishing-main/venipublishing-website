@@ -178,9 +178,16 @@ jobs:
               --use-list=/venibackup/veni-recovery-filtered.toc \
               --dbname="$RECOVERY_CLONE_DB_URL" /venibackup/veni-independent-recovery.dump
           # --no-owner deliberately avoids replaying platform ownership; apply
-          # only the reviewed app role's function ownership from source.
+          # only the reviewed app role's function ownership from source. The
+          # local `postgres` login is not SUPERUSER, so PostgreSQL requires
+          # a temporary SET ROLE membership (as in the original M2 migration).
+          # Drop the membership immediately; the verifier checks it is absent.
+          psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -c 'GRANT reserve_settings_executor TO postgres WITH SET TRUE;'
           psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
             -f "$RUNNER_TEMP/veni-recovery-function-owners.sql"
+          psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -c 'REVOKE reserve_settings_executor FROM postgres;'
           node website/tests/integration/verify-independent-supabase-recovery.mjs
       - name: Boot independent recovered GoTrue using original cloned Auth records
         run: |
