@@ -62,7 +62,9 @@ The further GitHub workflow [Reserve atomic Auth and business cutover rehearsal]
 | Idempotency/replay | Repeat import preflight rejected a populated target |
 | Original Reserve source | Still contains all five accounts, two tenants and original audit events |
 
-**Scope boundary:** These M1 fixtures contain tenant/role/invitation/audit data, **not actual booking records**. The booking domain, any additional M2 tables present in the live Reserve app, uploaded files, configured authentication hooks/providers, full backup/restore for the integrated Auth transfer and production staging remain **open gates**. A green synthetic run is not permission for a hosted migration.
+**Scope boundary:** These M1 fixtures contain tenant/role/invitation/audit data, **not actual booking records**. Future booking/M2 tables, uploaded files, configured authentication hooks/providers, full backup/restore for the integrated Auth transfer and production staging remain **open gates**. A green synthetic run is not permission for a hosted migration.
+
+**Hosted source table inventory (2026-11-16, read-only):** The Reserve staging project currently exposes exactly 10 application tables across `public` and `private`: `users`, `tenants`, `roles`, `role_permissions`, `permissions`, `memberships`, `membership_roles`, `audit_events`, `invitations`, `invitation_roles`. All 10 have RLS enabled. The integrated manifest covers the nine domain/relationship tables (including custom-role rows) and verifies equality of the seeded system-permission/role catalogue; thus, **no currently deployed Reserve application table is omitted** from this M1 rehearsal. Neither bookings nor tenant business settings are currently deployed as tables in this source inventory; future migrations must be inventoried afresh rather than assuming coverage.
 
 ## Candidate approaches
 
