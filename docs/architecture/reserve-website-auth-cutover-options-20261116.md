@@ -16,8 +16,10 @@ The `reserve-dual-auth-handoff.yml` GitHub Action uses **two real, separately co
 1. Registering the same synthetic email in each local project produces different account UUIDs. Equal email addresses are not sufficient evidence for merging accounts.
 2. A Reserve-issued JWT and refresh token are rejected by the Website Auth project when the signing secrets are independent.
 3. Creating a new Website account does not silently grant access with the existing Reserve password; an explicit linking/reauthentication mechanism would be needed.
-4. A **selective Auth row import** is a different technique: transfer a synthetic source `auth.users` record and its `auth.identities` records into a Website database that already contains a separate user. If the schema versions match, this *may* retain the source UUID and encrypted password while preserving existing Website users. This is tested only on two disposable stacks, using no hosted data, identities, credentials, or passwords.
+4. A **selective Auth row import** is a different technique: transfer a synthetic source `auth.users` record and its `auth.identities` records into a Website database that already contains a separate user. With matching local Auth schemas, the test **did preserve** the source UUID and encrypted password while preserving the existing Website user. This is proved only on two disposable stacks, using no hosted data, identities, credentials, or passwords.
 5. Even if the password hash and UUID transfer correctly, a fresh Website login is required when JWT signing secrets differ. Old sessions and refresh tokens are **not imported**.
+6. A synthetic **duplicate-email collision** with different source/Website UUIDs rejected the import atomically, leaving the existing Website user intact and no orphaned source rows.
+7. A synthetic **forced error after inserting Auth identities** rolled back users, identities, and the Website profile created by the Auth trigger.
 
 Supabase's official Knowledge Base, updated 2026-11-03, confirms that an Auth schema migration can include password hashes; it also explicitly says there is no one-size-fits-all Auth-only script. JWT signing-secret differences invalidate old tokens. See [Migrating Auth Users Between Supabase Projects](https://supabase.com/kb/troubleshooting/migrating-auth-users-between-projects).
 
