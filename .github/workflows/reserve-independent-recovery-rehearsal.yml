@@ -1,0 +1,222 @@
+name: Reserve to Website independent recovery and fresh GoTrue login (local only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-independent-recovery-rehearsal.yml'
+      - 'tests/integration/integrated-auth-recovery/**'
+      - 'tests/integration/verify-independent-supabase-recovery.mjs'
+      - 'tests/integration/real-auth-reserve-integrated-rehearsal.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  cross-cluster-synthetic-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      VENI_DUAL_AUTH_DISPOSABLE: 'yes'
+      VENI_ATOMIC_RESERVE_REHEARSAL: 'yes'
+      VENI_CROSS_CLUSTER_RECOVERY: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: ecb6b23fc4ee8ec15fbb6074a3e347f87f3d0555
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301
+          path: website-preview
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13
+        with:
+          version: 3.0.0
+      - name: Validate pinned synthetic-only recovery assets
+        run: |
+          set -euo pipefail
+          node --check website/tests/integration/real-auth-reserve-integrated-rehearsal.mjs
+          node --check website/tests/integration/verify-independent-supabase-recovery.mjs
+          supabase --version
+          supabase stack --help
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/integrated-recovery-preview"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/integrated-recovery-preview"
+      - name: Start independent disposable Reserve SOURCE
+        working-directory: website/tests/integration/integrated-auth-source
+        run: |
+          set -euo pipefail
+          supabase start --exclude studio,mail,realtime,storage,functions,analytics --eager
+          supabase status --env --output-format text > "$RUNNER_TEMP/veni-recovery-source.env"
+      - name: Start independent disposable Website TARGET
+        working-directory: website/tests/integration/integrated-auth-target
+        run: |
+          set -euo pipefail
+          supabase migration new reserve_api_schema_bootstrap
+          shopt -s nullglob
+          files=(supabase/migrations/*_reserve_api_schema_bootstrap.sql)
+          test "${#files[@]}" -eq 1
+          cp ../real-auth-schema-bootstrap.sql "${files[0]}"
+          supabase start --exclude studio,mail,realtime,storage,functions,analytics --eager
+          supabase status --env --output-format text > "$RUNNER_TEMP/veni-recovery-target.env"
+      - name: Populate two genuine GoTrue stacks and transfer synthetic Auth and M1 domain
+        run: |
+          set -euo pipefail
+          umask 077
+          set -a
+          source "$RUNNER_TEMP/veni-recovery-source.env"
+          SOURCE_API_URL="$API_URL"
+          SOURCE_DB_URL="$DB_URL"
+          SOURCE_ANON_KEY="$ANON_KEY"
+          source "$RUNNER_TEMP/veni-recovery-target.env"
+          TARGET_API_URL="$API_URL"
+          TARGET_DB_URL="$DB_URL"
+          TARGET_ANON_KEY="$ANON_KEY"
+          set +a
+          for url in "$SOURCE_DB_URL" "$TARGET_DB_URL"; do
+            case "$url" in
+              postgresql://*@127.0.0.1:[23]*/postgres|postgres://*@127.0.0.1:[23]*/postgres|postgresql://*@localhost:[23]*/postgres|postgres://*@localhost:[23]*/postgres) ;;
+              *) echo 'Refusing non-loopback source/target'; exit 1 ;;
+            esac
+          done
+          psql "$SOURCE_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f reserve/supabase/migrations/20261030154642_m1_1a_tenant_user_membership_persistence.sql \
+            -f reserve/supabase/migrations/20261030174937_m1_1b_role_permission_invitation_audit_foundation.sql \
+            -f reserve/supabase/migrations/20261031031256_m1_2_rls_cross_tenant_security.sql
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f "$RUNNER_TEMP/integrated-recovery-preview/preview-1-m1a.sql" \
+            -f "$RUNNER_TEMP/integrated-recovery-preview/preview-2-m1b.sql" \
+            -f "$RUNNER_TEMP/integrated-recovery-preview/preview-3-m12.sql" \
+            -f "$RUNNER_TEMP/integrated-recovery-preview/preview-4-m21.sql" \
+            -f website/tests/integration/reserve-account-deletion-preflight-prototype.sql
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
+          export VENI_EXPORT_SYNTHETIC_RECOVERY_ACCOUNTS=yes
+          export VENI_SYNTHETIC_RECOVERY_ACCOUNTS_FILE="$RUNNER_TEMP/veni-recovery-accounts.json"
+          node website/tests/integration/real-auth-reserve-integrated-rehearsal.mjs
+      - name: Start THIRD independent local Supabase stack for recovery
+        working-directory: website/tests/integration/integrated-auth-recovery
+        run: |
+          set -euo pipefail
+          supabase migration new reserve_api_schema_bootstrap
+          shopt -s nullglob
+          files=(supabase/migrations/*_reserve_api_schema_bootstrap.sql)
+          test "${#files[@]}" -eq 1
+          cp ../real-auth-schema-bootstrap.sql "${files[0]}"
+          supabase start --exclude studio,mail,realtime,storage,functions,analytics --eager
+          supabase status --env --output-format text > "$RUNNER_TEMP/veni-recovery-third.env"
+      - name: Restore snapshot to DIFFERENT disposable PostgreSQL server and reconcile
+        run: |
+          set -euo pipefail
+          umask 077
+          set -a
+          source "$RUNNER_TEMP/veni-recovery-target.env"
+          TARGET_DB_URL="$DB_URL"
+          source "$RUNNER_TEMP/veni-recovery-third.env"
+          RECOVERY_DB_URL="$DB_URL"
+          set +a
+          node -e '
+            const a=new URL(process.env.TARGET_DB_URL),b=new URL(process.env.RECOVERY_DB_URL);
+            for(const u of [a,b]) {if(!["localhost","127.0.0.1"].includes(u.hostname)||+u.port<20000||+u.port>32767||u.pathname!=="/postgres")throw Error("Only disposable PostgreSQL endpoints allowed")}
+            if(a.port===b.port)throw Error("Not independent PostgreSQL clusters");'
+          RECOVERY_CLONE_DB_URL="$(node -e 'const u=new URL(process.env.RECOVERY_DB_URL);u.pathname="/veni_restored_ci";process.stdout.write(u.href)')"
+          export RECOVERY_CLONE_DB_URL
+          export VENI_RECOVERY_PHASE=database
+          export VENI_SYNTHETIC_RECOVERY_ACCOUNTS_FILE="$RUNNER_TEMP/veni-recovery-accounts.json"
+
+          # Protected Vault ciphertext and Supabase system ACLs are intentionally
+          # NOT copied. No hosted projects, secret artifacts, or privilege bypass.
+          BACKUP_FILE="$RUNNER_TEMP/veni-independent-recovery.dump"
+          docker run --rm --network host postgres:17 \
+            pg_dump --format=custom --no-owner \
+              --exclude-table-data=vault.secrets --dbname="$TARGET_DB_URL" > "$BACKUP_FILE"
+          test -s "$BACKUP_FILE"
+          psql "$RECOVERY_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE veni_restored_ci TEMPLATE template0;'
+          docker run --rm --network host -i postgres:17 \
+            pg_restore --list < "$BACKUP_FILE" > "$RUNNER_TEMP/veni-recovery-original.toc"
+          awk '/^[0-9]+;/ && / DEFAULT ACL / && /supabase_admin/ {
+            print ";" $0; next
+          } /^[0-9]+;/ && / ACL / {
+            if ($0 ~ / ACL (public|reserve|reserve_internal) / ||
+                $0 ~ / ACL - SCHEMA (auth|public|reserve|reserve_internal|storage) /) {print; next}
+            print ";" $0; next
+          } {print}' \
+            "$RUNNER_TEMP/veni-recovery-original.toc" > "$RUNNER_TEMP/veni-recovery-filtered.toc"
+          grep -q '^;[0-9].* ACL .*pg_stat_statements_reset(' "$RUNNER_TEMP/veni-recovery-filtered.toc"
+          grep -q '^;[0-9].* ACL .*pg_reload_conf' "$RUNNER_TEMP/veni-recovery-filtered.toc"
+          docker run --rm --network host \
+            -v "$RUNNER_TEMP:/venibackup:ro" postgres:17 \
+            pg_restore --no-owner --exit-on-error --single-transaction \
+              --use-list=/venibackup/veni-recovery-filtered.toc \
+              --dbname="$RECOVERY_CLONE_DB_URL" /venibackup/veni-independent-recovery.dump
+          node website/tests/integration/verify-independent-supabase-recovery.mjs
+      - name: Boot independent recovered GoTrue using original cloned Auth records
+        run: |
+          set -euo pipefail
+          umask 077
+          set -a
+          source "$RUNNER_TEMP/veni-recovery-target.env"
+          TARGET_DB_URL="$DB_URL"
+          source "$RUNNER_TEMP/veni-recovery-third.env"
+          RECOVERY_DB_URL="$DB_URL"
+          set +a
+          RECOVERY_CLONE_DB_URL="$(node -e 'const u=new URL(process.env.RECOVERY_DB_URL);u.pathname="/veni_restored_ci";process.stdout.write(u.href)')"
+          export RECOVERY_CLONE_DB_URL
+          export VENI_RECOVERY_PHASE=auth
+          export VENI_SYNTHETIC_RECOVERY_ACCOUNTS_FILE="$RUNNER_TEMP/veni-recovery-accounts.json"
+          export RECOVERED_GOTRUE_URL='http://127.0.0.1:29587'
+
+          # Reuse the pinned Supabase CLI's actual GoTrue image/config, but
+          # attach to the restored database and use a NEW ephemeral JWT secret.
+          AUTH_CONTAINER="$(docker ps --format '{{.ID}} {{.Image}}' | awk '$2 ~ /gotrue|supabase\/auth/ {print $1;exit}')"
+          test -n "$AUTH_CONTAINER"
+          AUTH_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$AUTH_CONTAINER")"
+          docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' \
+            "$AUTH_CONTAINER" > "$RUNNER_TEMP/veni-recovery-gotrue.env"
+          RECOVERED_JWT_SECRET="$(openssl rand -hex 32)"
+          docker run --rm -d --name veni-recovered-gotrue-ci --network host \
+            --env-file "$RUNNER_TEMP/veni-recovery-gotrue.env" \
+            -e DATABASE_URL="$RECOVERY_CLONE_DB_URL" \
+            -e GOTRUE_DB_DATABASE_URL="$RECOVERY_CLONE_DB_URL" \
+            -e GOTRUE_JWT_SECRET="$RECOVERED_JWT_SECRET" \
+            -e GOTRUE_API_HOST=127.0.0.1 \
+            -e PORT=29587 -e API_EXTERNAL_URL="$RECOVERED_GOTRUE_URL" \
+            -e GOTRUE_DISABLE_SIGNUP=true -e GOTRUE_LOG_LEVEL=error \
+            "$AUTH_IMAGE" > "$RUNNER_TEMP/veni-recovered-auth.cid"
+          for attempt in $(seq 1 45); do
+            if curl -fsS "$RECOVERED_GOTRUE_URL/health" >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS "$RECOVERED_GOTRUE_URL/health" >/dev/null
+          node website/tests/integration/verify-independent-supabase-recovery.mjs
+      - name: Stop recovered standalone GoTrue
+        if: always()
+        continue-on-error: true
+        run: docker stop veni-recovered-gotrue-ci
+      - name: Stop third local Supabase stack
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/integrated-auth-recovery
+        run: supabase stop
+      - name: Stop local Reserve SOURCE
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/integrated-auth-source
+        run: supabase stop
+      - name: Stop local Website TARGET
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/integrated-auth-target
+        run: supabase stop
