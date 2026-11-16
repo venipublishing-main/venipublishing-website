@@ -142,9 +142,10 @@ jobs:
             -c 'CREATE DATABASE veni_restored_ci TEMPLATE template0;'
 
           # A Supabase local stack includes GRANTs on protected pg_catalog and
-          # extension functions. Carry ONLY Veni-owned application-schema ACLs
-          # across; platform-managed grants are a separate recovery gate.
-          # Do not bypass protected functions' permission boundaries.
+          # extension functions. Carry application ACLs and schema USAGE grants
+          # for Auth/Storage, so restored RLS can call auth.uid()/auth.jwt().
+          # Other platform-managed grants are a separate recovery gate. Do not
+          # bypass protected functions' permission boundaries.
           docker run --rm --network host -i postgres:17 \
             pg_restore --list < "$BACKUP_FILE" > "$RUNNER_TEMP/veni-restore-original.toc"
           # Default privileges owned by supabase_admin cannot be set by the
@@ -154,7 +155,7 @@ jobs:
             print ";" $0; next
           } /^[0-9]+;/ && / ACL / {
             if ($0 ~ / ACL (public|reserve|reserve_internal) / ||
-                $0 ~ / ACL - SCHEMA (public|reserve|reserve_internal) /) {print; next}
+                $0 ~ / ACL - SCHEMA (auth|public|reserve|reserve_internal|storage) /) {print; next}
             print ";" $0; next
           } {print}' \
             "$RUNNER_TEMP/veni-restore-original.toc" > "$RUNNER_TEMP/veni-restore-filtered.toc"
