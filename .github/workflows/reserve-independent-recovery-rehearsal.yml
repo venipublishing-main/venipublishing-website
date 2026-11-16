@@ -149,6 +149,8 @@ jobs:
           # roles or hosted credentials.
           psql "$RECOVERY_DB_URL" -X -v ON_ERROR_STOP=1 -c \
             'CREATE ROLE reserve_settings_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;'
+          psql "$RECOVERY_DB_URL" -X -v ON_ERROR_STOP=1 -c \
+            "ALTER ROLE reserve_settings_executor SET search_path = '';"
           psql "$TARGET_DB_URL" -X -A -t -v ON_ERROR_STOP=1 -c "
             SELECT format('ALTER FUNCTION %I.%I(%s) OWNER TO reserve_settings_executor;',
               n.nspname,p.proname,pg_get_function_identity_arguments(p.oid))
@@ -180,12 +182,17 @@ jobs:
           # --no-owner deliberately avoids replaying platform ownership; apply
           # only the reviewed app role's function ownership from source. The
           # local `postgres` login is not SUPERUSER, so PostgreSQL requires
-          # a temporary SET ROLE membership (as in the original M2 migration).
-          # Drop the membership immediately; the verifier checks it is absent.
+          # a temporary SET ROLE membership and CREATE on the private schema,
+          # matching the exact original M2 migration's restricted ownership
+          # transfer. Revoke BOTH immediately after; the verifier checks drift.
           psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
             -c 'GRANT reserve_settings_executor TO postgres WITH SET TRUE;'
           psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -c 'GRANT CREATE ON SCHEMA reserve_internal TO reserve_settings_executor;'
+          psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
             -f "$RUNNER_TEMP/veni-recovery-function-owners.sql"
+          psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -c 'REVOKE CREATE ON SCHEMA reserve_internal FROM reserve_settings_executor;'
           psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
             -c 'REVOKE reserve_settings_executor FROM postgres;'
           node website/tests/integration/verify-independent-supabase-recovery.mjs
