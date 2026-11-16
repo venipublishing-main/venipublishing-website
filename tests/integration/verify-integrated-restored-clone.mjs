@@ -64,6 +64,17 @@ assert.deepEqual(json(after,rls),json(before,rls),'RLS settings changed in backu
 const policy=`SELECT coalesce(json_agg(row_to_json(p) ORDER BY schemaname,tablename,policyname),'[]'::json)::text
  FROM pg_policies p WHERE schemaname IN ('public','reserve','reserve_internal');`;
 assert.deepEqual(json(after,policy),json(before,policy),'RLS policy definitions changed');
+const applicationGrants=`WITH grants AS (
+ SELECT n.nspname AS schema_name, c.relname AS object_name,
+   a.grantor::text, a.grantee::text, a.privilege_type, a.is_grantable
+ FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+ CROSS JOIN LATERAL aclexplode(c.relacl) a
+ WHERE c.relkind IN ('r','p','v','m','S')
+   AND n.nspname IN ('public','reserve','reserve_internal')
+) SELECT coalesce(json_agg(row_to_json(g) ORDER BY schema_name,object_name,
+ grantor,grantee,privilege_type,is_grantable),'[]'::json)::text FROM grants g;`;
+assert.deepEqual(json(after,applicationGrants),json(before,applicationGrants),
+  'Veni application table/view/sequence privileges changed during restore');
 const triggers=`SELECT coalesce(json_agg(json_build_object('table',n.nspname||'.'||c.relname,
    'name',t.tgname,'definition',pg_get_triggerdef(t.oid)) ORDER BY n.nspname,c.relname,t.tgname),'[]'::json)::text
  FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
@@ -102,5 +113,5 @@ assert.equal(psql(after,`SELECT tgenabled FROM pg_trigger
 
 console.log('PASS: PostgreSQL application/Auth/Storage metadata dump restored to a separate clean database (Vault secret data intentionally excluded)');
 console.log(`PASS: ${originalTables.length} Auth/Website/Reserve/Storage table datasets match exactly`);
-console.log('PASS: RLS settings, policies, application triggers, owner access, audit and deletion guard restored');
+console.log('PASS: RLS settings, policies, application grants, triggers, owner access, audit and deletion guard restored');
 console.log('GATE OPEN: global roles, external Storage object bytes, Vault/root keys, Edge secrets, and GoTrue login against the clone still require separate evidence');
