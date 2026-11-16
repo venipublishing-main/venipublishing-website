@@ -9,6 +9,8 @@ on:
       - 'tests/merge-reserve-m1.test.mjs'
       - 'tests/merge-reserve-m2.test.mjs'
       - 'tests/integration/**'
+      - 'supabase/functions/delete-account/**'
+      - 'supabase/functions/_shared/**'
 
 permissions:
   contents: read
@@ -182,7 +184,8 @@ jobs:
             -f "$RUNNER_TEMP/reserve-merge-auth/preview-1-m1a.sql" \
             -f "$RUNNER_TEMP/reserve-merge-auth/preview-2-m1b.sql" \
             -f "$RUNNER_TEMP/reserve-merge-auth/preview-3-m12.sql" \
-            -f "$RUNNER_TEMP/reserve-merge-auth/preview-4-m21.sql"
+            -f "$RUNNER_TEMP/reserve-merge-auth/preview-4-m21.sql" \
+            -f website/tests/integration/reserve-account-deletion-preflight-prototype.sql
           psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
           node website/tests/integration/real-auth-smoke.mjs
       - name: Stop disposable Supabase services
