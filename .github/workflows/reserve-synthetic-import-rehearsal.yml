@@ -1,0 +1,118 @@
+name: Reserve to Website disposable cutover rehearsal
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-synthetic-import-rehearsal.yml'
+      - 'tests/integration/rehearse-reserve-import.mjs'
+      - 'tests/integration/reserve-source-synthetic-seed.sql'
+      - 'tests/integration/reserve-import-preflight-verify.sql'
+      - 'tests/integration/reserve-import-rls-verify.sql'
+      - 'scripts/merge-reserve-m1.mjs'
+      - 'scripts/merge-reserve-m2.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  separate-source-to-website:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: veni_merge_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd=pg_isready
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: local_ci_only
+      VENI_DISPOSABLE_IMPORT: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: ecb6b23fc4ee8ec15fbb6074a3e347f87f3d0555
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301
+          path: website-preview
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build isolated SOURCE and Website TARGET databases
+        run: |
+          set -euo pipefail
+          node --check website/tests/integration/rehearse-reserve-import.mjs
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-local-preview"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/reserve-local-preview"
+          createdb veni_import_source_ci
+          createdb veni_import_target_ci
+
+          PGDATABASE=veni_import_source_ci psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/mock-supabase-auth.sql \
+            -f reserve/supabase/migrations/20261030154642_m1_1a_tenant_user_membership_persistence.sql \
+            -f reserve/supabase/migrations/20261030174937_m1_1b_role_permission_invitation_audit_foundation.sql \
+            -f reserve/supabase/migrations/20261031031256_m1_2_rls_cross_tenant_security.sql \
+            -f website/tests/integration/reserve-source-synthetic-seed.sql
+
+          PGDATABASE=veni_import_target_ci psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/mock-supabase-auth.sql \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f website/tests/integration/website-before-reserve.sql \
+            -f "$RUNNER_TEMP/reserve-local-preview/preview-1-m1a.sql" \
+            -f "$RUNNER_TEMP/reserve-local-preview/preview-2-m1b.sql" \
+            -f "$RUNNER_TEMP/reserve-local-preview/preview-3-m12.sql" \
+            -f "$RUNNER_TEMP/reserve-local-preview/preview-4-m21.sql" \
+            -f website/tests/integration/reserve-import-preflight-verify.sql
+      - name: Save restorable local pre-import Website snapshot
+        run: |
+          set -euo pipefail
+          # The database is disposable. The PG17 server's own dump binary is
+          # used to avoid runner/client major-version mismatch.
+          docker exec "${{ job.services.postgres.id }}" \
+            pg_dump -U postgres -d veni_import_target_ci --format=custom \
+            > "$RUNNER_TEMP/website-before-import.dump"
+          test -s "$RUNNER_TEMP/website-before-import.dump"
+      - name: Prove failure atomicity, copy identities and history, and reject replay
+        run: |
+          set -euo pipefail
+          node website/tests/integration/rehearse-reserve-import.mjs --collision-tests
+          node website/tests/integration/rehearse-reserve-import.mjs --rollback
+          PGDATABASE=veni_import_target_ci psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/reserve-import-preflight-verify.sql
+
+          node website/tests/integration/rehearse-reserve-import.mjs --apply
+          PGDATABASE=veni_import_target_ci psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/reserve-import-rls-verify.sql
+
+          node website/tests/integration/rehearse-reserve-import.mjs --reject-replay
+      - name: Restore original Website data into a different disposable database
+        run: |
+          set -euo pipefail
+          createdb veni_import_restored_ci
+          docker exec -i "${{ job.services.postgres.id }}" \
+            pg_restore -U postgres -d veni_import_restored_ci \
+            < "$RUNNER_TEMP/website-before-import.dump"
+          PGDATABASE=veni_import_restored_ci psql -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/reserve-import-preflight-verify.sql
