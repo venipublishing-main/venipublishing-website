@@ -97,6 +97,7 @@ jobs:
       - name: Prove failure atomicity, copy identities and history, and reject replay
         run: |
           set -euo pipefail
+          node website/tests/integration/rehearse-reserve-import.mjs --collision-tests
           node website/tests/integration/rehearse-reserve-import.mjs --rollback
           PGDATABASE=veni_import_target_ci psql -X -v ON_ERROR_STOP=1 \
             -f website/tests/integration/reserve-import-preflight-verify.sql
