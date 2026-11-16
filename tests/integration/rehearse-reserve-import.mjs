@@ -10,8 +10,8 @@ const TARGET = 'veni_import_target_ci';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const mode = process.argv[2];
 
-if (!['--rollback', '--apply', '--verify', '--reject-replay'].includes(mode)) {
-  throw new Error('Specify --rollback, --apply, --verify or --reject-replay');
+if (!['--rollback', '--apply', '--verify', '--reject-replay', '--collision-tests'].includes(mode)) {
+  throw new Error('Specify --rollback, --apply, --verify, --reject-replay or --collision-tests');
 }
 if (process.env.VENI_DISPOSABLE_IMPORT !== 'yes'
   || !['127.0.0.1', 'localhost'].includes(process.env.PGHOST)
@@ -98,9 +98,13 @@ function preflight() {
   compareCatalogues();
   assert.equal(targetRecordCount(), 0, 'Target Reserve contains dynamic data: abort');
   const existing = jsonRows(TARGET, 'SELECT id,email FROM auth.users');
+  assertNoIdentityCollisions(existing, sourceIdentities);
+}
+
+function assertNoIdentityCollisions(existing, incoming) {
   const existingIds = new Set(existing.map(({ id }) => id));
   const existingEmails = new Set(existing.map(({ email }) => email?.trim().toLowerCase()));
-  for (const { id, email } of sourceIdentities) {
+  for (const { id, email } of incoming) {
     assert.ok(!existingIds.has(id), `Auth UUID collision: ${id}`);
     assert.ok(!existingEmails.has(email.trim().toLowerCase()), 'Normalized Auth email collision');
   }
@@ -187,4 +191,13 @@ if (mode === '--rollback') {
   assert.throws(() => preflight(), /Target Reserve contains dynamic data|collision/i);
   verify();
   console.log('PASS: replay onto a populated target rejected without mutation');
+} else if (mode === '--collision-tests') {
+  assert.throws(() => assertNoIdentityCollisions(
+    [{ id: sourceIdentities[0].id, email: 'unrelated@example.invalid' }], sourceIdentities), /Auth UUID collision/);
+  assert.throws(() => assertNoIdentityCollisions(
+    [{ id: '99999999-9999-4999-8999-999999999999', email: `  ${sourceIdentities[0].email.toUpperCase()} ` }],
+    sourceIdentities), /Normalized Auth email collision/);
+  assert.doesNotThrow(() => assertNoIdentityCollisions(
+    [{ id: '99999999-9999-4999-8999-999999999999', email: 'website-only@example.invalid' }], sourceIdentities));
+  console.log('PASS: UUID and whitespace/case-normalized email collisions are explicitly rejected');
 }
