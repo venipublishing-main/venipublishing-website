@@ -44,6 +44,26 @@ The `reserve-dual-auth-handoff.yml` GitHub Action uses **two real, separately co
 
 Supabase's official Knowledge Base, updated 2026-11-03, confirms that an Auth schema migration can include password hashes; it also explicitly says there is no one-size-fits-all Auth-only script. JWT signing-secret differences invalidate old tokens. See [Migrating Auth Users Between Supabase Projects](https://supabase.com/kb/troubleshooting/migrating-auth-users-between-projects).
 
+## Integrated two-project rehearsal — PASSED on 2026-11-16
+
+The further GitHub workflow [Reserve atomic Auth and business cutover rehearsal](https://github.com/venipublishing-main/venipublishing-website/actions/workflows/reserve-integrated-cutover-rehearsal.yml) now brings both earlier experiments together. It starts two **genuine, independent GoTrue/Auth + PostgreSQL + PostgREST** stacks and uses only synthetic `@example.invalid` identities. The Reserve application inputs are pinned to the same reviewed M1.1a/M1.1b/M1.2 commits as the earlier tests; the destination includes the Website Account Layer, Arcana pilot and isolated Reserve preview.
+
+| One-run check | Observed outcome |
+| --- | --- |
+| Genuine Reserve login identities | Five users, five Auth identity records, all password hashes retained |
+| Existing Website account and Arcana reading | Remained readable and unchanged |
+| Reserve domain graph | Two tenants, four memberships, custom role, permission grants, private invitation and immutable audit entries retained |
+| Import transaction | Auth users, identities, profiles and all Reserve domain records committed together |
+| Forced error after some domain records | Complete rollback of imported Auth, profile trigger effects and Reserve rows; Website baseline intact |
+| Original Auth UUID and password | All five synthetic Reserve users re-authenticated at Website with the same password and UUID |
+| Cross-project JWT/refresh tokens | Source-issued tokens rejected at destination; new Website sessions required |
+| PostgREST row-level security | Owners, custom assistant, staff, unassigned user and existing Website account restricted to authorised records |
+| Account-deletion preflight | Owners required transfer; others with Reserve history blocked from direct deletion; Website-only user clear |
+| Idempotency/replay | Repeat import preflight rejected a populated target |
+| Original Reserve source | Still contains all five accounts, two tenants and original audit events |
+
+**Scope boundary:** These M1 fixtures contain tenant/role/invitation/audit data, **not actual booking records**. The booking domain, any additional M2 tables present in the live Reserve app, uploaded files, configured authentication hooks/providers, full backup/restore for the integrated Auth transfer and production staging remain **open gates**. A green synthetic run is not permission for a hosted migration.
+
 ## Candidate approaches
 
 | Option | User experience | Identity strategy | Principal risks / gate |
