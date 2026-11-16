@@ -150,12 +150,30 @@ if(phase==='database'){
 
 if(phase==='auth'){
   const api=localUrl('RECOVERED_GOTRUE_URL',process.env.RECOVERED_GOTRUE_URL,['http:']);
-  const origin=api.origin;
+  assert.equal(api.pathname,'/auth/v1','Use third native local Supabase GoTrue service');
+  const authDb=localUrl('RECOVERY_AUTH_DB_URL',process.env.RECOVERY_AUTH_DB_URL,
+    ['postgres:','postgresql:']);
+  assert.equal(authDb.port,clone.port,'Recovered Auth service must use independent PostgreSQL server');
+  assert.equal(authDb.pathname,'/postgres','Third native Auth database required');
+  assert.ok(process.env.RECOVERED_ANON_KEY?.length>20,'Third local public key required');
+  assert.equal(psql(authDb,'SELECT count(*) FROM auth.users;'),'6');
+  assert.equal(psql(authDb,'SELECT count(*) FROM auth.identities;'),'6');
+  const userCredentials=`SELECT md5(coalesce(string_agg(
+    id::text||':'||coalesce(email,'')||':'||coalesce(encrypted_password,''),'|'
+    ORDER BY id),'')) FROM auth.users;`;
+  const identityLinks=`SELECT md5(coalesce(string_agg(
+    id::text||':'||user_id::text||':'||provider||':'||provider_id,'|'
+    ORDER BY id),'')) FROM auth.identities;`;
+  assert.equal(psql(authDb,userCredentials),psql(clone,userCredentials),
+    'Recovered credentials or original Auth UUIDs changed on third server');
+  assert.equal(psql(authDb,identityLinks),psql(clone,identityLinks),
+    'Recovered provider identity keys changed on third server');
+  const base=new URL(`${api.href.replace(/\/$/,'')}/`);
   async function request(path,token,body){
-    const headers={};
+    const headers={apikey:process.env.RECOVERED_ANON_KEY};
     if(token)headers.authorization=`Bearer ${token}`;
     if(body!==undefined)headers['content-type']='application/json';
-    const res=await fetch(new URL(path,origin),{
+    const res=await fetch(new URL(path.replace(/^\/+/,''),base),{
       method:body===undefined?'GET':'POST',headers,
       body:body===undefined?undefined:JSON.stringify(body),
       signal:AbortSignal.timeout(15000),
@@ -179,7 +197,8 @@ if(phase==='auth'){
   const query=asUser(clone,fixture.reserve.owner_a.id,
     'SELECT count(*) FROM reserve.tenants; SELECT public.reserve_account_deletion_preflight();');
   assert.deepEqual(query.split('\n').filter(Boolean),['1','OWNER_TRANSFER_REQUIRED']);
-  console.log('PASS: recovered standalone GoTrue issued fresh logins for six original users and UUIDs');
-  console.log('PASS: old target JWT rejected by independent signing secret; restored tenant and deletion RLS retained');
+  console.log('PASS: third independent native GoTrue signed in six restored users with original UUIDs/passwords');
+  console.log('PASS: old target JWT rejected by separate Auth authority; full-clone tenant/deletion RLS retained');
+  console.log('LIMIT: fresh Auth service uses compatible third-stack Auth catalogue imported from clone, not GoTrue startup on full clone');
   console.log('GATE OPEN: hosted Auth configs/OAuth/MFA, Storage bytes, Vault keys, cross-project secrets and production cutover');
 }
