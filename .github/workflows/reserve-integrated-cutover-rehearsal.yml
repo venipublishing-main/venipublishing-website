@@ -8,6 +8,7 @@ on:
       - 'tests/integration/integrated-auth-target/**'
       - 'tests/integration/real-auth-reserve-source-business-seed.sql'
       - 'tests/integration/real-auth-reserve-integrated-rehearsal.mjs'
+      - 'tests/integration/verify-integrated-restored-clone.mjs'
       - 'tests/integration/real-auth-schema-bootstrap.sql'
       - 'tests/integration/reserve-account-deletion-preflight-prototype.sql'
       - 'scripts/merge-reserve-m1.mjs'
@@ -23,6 +24,7 @@ jobs:
     env:
       VENI_DUAL_AUTH_DISPOSABLE: 'yes'
       VENI_ATOMIC_RESERVE_REHEARSAL: 'yes'
+      VENI_FULL_RESTORE_CI: 'yes'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,6 +52,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check website/tests/integration/real-auth-reserve-integrated-rehearsal.mjs
+          node --check website/tests/integration/verify-integrated-restored-clone.mjs
           node --test website/tests/merge-reserve-m1.test.mjs website/tests/merge-reserve-m2.test.mjs
           supabase --version
           supabase stack --help
@@ -110,6 +113,34 @@ jobs:
             -f website/tests/integration/reserve-account-deletion-preflight-prototype.sql
           psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
           node website/tests/integration/real-auth-reserve-integrated-rehearsal.mjs
+      - name: Restore full disposable Website logical backup into clean local database
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/veni-integrated-target.env"
+          TARGET_DB_URL="$DB_URL"
+          set +a
+          # No live project or external connection can satisfy this gate.
+          node -e 'const assert=require("node:assert/strict"); const u=new URL(process.env.TARGET_DB_URL); assert.ok(["postgres:","postgresql:"].includes(u.protocol)); assert.ok(["localhost","127.0.0.1"].includes(u.hostname)); assert.ok(+u.port>=20000 && +u.port<=32767); assert.equal(u.pathname,"/postgres")'
+
+          umask 077
+          BACKUP_FILE="$RUNNER_TEMP/veni-integrated-disposable-full.dump"
+          docker run --rm --network host postgres:17 \
+            pg_dump --format=custom --no-owner --dbname="$TARGET_DB_URL" > "$BACKUP_FILE"
+          test -s "$BACKUP_FILE"
+
+          # A new empty database on the SAME disposable PostgreSQL cluster.
+          # This proves logical recovery, not cross-cluster/global-role recovery.
+          RESTORED_DB_URL="$(node -e 'const u=new URL(process.env.TARGET_DB_URL); u.pathname="/veni_restored_ci"; process.stdout.write(u.href)')"
+          export RESTORED_DB_URL
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE veni_restored_ci TEMPLATE template0;'
+          docker run --rm --network host -i postgres:17 \
+            pg_restore --no-owner --exit-on-error --single-transaction \
+              --dbname="$RESTORED_DB_URL" < "$BACKUP_FILE"
+
+          node website/tests/integration/verify-integrated-restored-clone.mjs
+          # Backup remains runner-private, never uploaded as a workflow artifact.
       - name: Stop local Reserve SOURCE
         if: always()
         continue-on-error: true
