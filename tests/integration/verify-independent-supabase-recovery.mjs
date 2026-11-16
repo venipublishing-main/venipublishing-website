@@ -104,8 +104,10 @@ if(phase==='database'){
     'Function owner or SECURITY DEFINER drift across servers');
   const executionRole=`SELECT json_build_object('login',rolcanlogin,
     'superuser',rolsuper,'bypass_rls',rolbypassrls,'inherit',rolinherit,
-    'create_db',rolcreatedb,'create_role',rolcreaterole)::text FROM pg_roles
-    WHERE rolname='reserve_settings_executor';`;
+    'create_db',rolcreatedb,'create_role',rolcreaterole,
+    'postgres_member',(SELECT count(*) FROM pg_auth_members m
+      WHERE m.roleid=r.oid AND m.member='postgres'::regrole))::text
+    FROM pg_roles r WHERE rolname='reserve_settings_executor';`;
   assert.deepEqual(json(clone,executionRole),json(source,executionRole),
     'Restricted settings role missing or weakened on independent cluster');
   // PostgreSQL role OIDs may differ between servers: compare role *names*,
