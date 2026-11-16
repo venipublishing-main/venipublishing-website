@@ -214,8 +214,15 @@ jobs:
 
           # Reuse the pinned Supabase CLI's actual GoTrue image/config, but
           # attach to the restored database and use a NEW ephemeral JWT secret.
-          AUTH_CONTAINER="$(docker ps --format '{{.ID}} {{.Image}}' | awk '$2 ~ /gotrue|supabase\/auth/ {print $1;exit}')"
-          test -n "$AUTH_CONTAINER"
+          # CLI v3 image registries vary; match the Auth *service name* as well
+          # as image instead of assuming docker image is called supabase/auth.
+          AUTH_CONTAINER="$(docker ps --format '{{.ID}} {{.Names}} {{.Image}}' |
+            awk 'tolower($2) ~ /auth|gotrue/ || tolower($3) ~ /auth|gotrue/ {print $1;exit}')"
+          if [ -z "$AUTH_CONTAINER" ]; then
+            echo 'Local Auth image discovery failed; listing only container names and public image tags:'
+            docker ps --format '{{.Names}} {{.Image}}'
+            exit 1
+          fi
           AUTH_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$AUTH_CONTAINER")"
           docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' \
             "$AUTH_CONTAINER" > "$RUNNER_TEMP/veni-recovery-gotrue.env"
@@ -226,7 +233,8 @@ jobs:
             -e GOTRUE_DB_DATABASE_URL="$RECOVERY_CLONE_DB_URL" \
             -e GOTRUE_JWT_SECRET="$RECOVERED_JWT_SECRET" \
             -e GOTRUE_API_HOST=127.0.0.1 \
-            -e PORT=29587 -e API_EXTERNAL_URL="$RECOVERED_GOTRUE_URL" \
+            -e GOTRUE_API_PORT=29587 -e PORT=29587 \
+            -e API_EXTERNAL_URL="$RECOVERED_GOTRUE_URL" \
             -e GOTRUE_DISABLE_SIGNUP=true -e GOTRUE_LOG_LEVEL=error \
             "$AUTH_IMAGE" > "$RUNNER_TEMP/veni-recovered-auth.cid"
           for attempt in $(seq 1 45); do
