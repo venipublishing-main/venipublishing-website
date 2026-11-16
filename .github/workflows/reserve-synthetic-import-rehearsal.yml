@@ -8,6 +8,11 @@ on:
       - 'tests/integration/reserve-source-synthetic-seed.sql'
       - 'tests/integration/reserve-import-preflight-verify.sql'
       - 'tests/integration/reserve-import-rls-verify.sql'
+      - 'tests/integration/reserve-account-deletion-preflight-prototype.sql'
+      - 'tests/integration/reserve-account-deletion-preflight-verify.sql'
+      - 'tests/integration/reserve-account-deletion-policy.test.mjs'
+      - 'supabase/functions/delete-account/**'
+      - 'supabase/functions/_shared/**'
       - 'scripts/merge-reserve-m1.mjs'
       - 'scripts/merge-reserve-m2.mjs'
 
@@ -97,6 +102,7 @@ jobs:
       - name: Prove failure atomicity, copy identities and history, and reject replay
         run: |
           set -euo pipefail
+          node --test website/tests/integration/reserve-account-deletion-policy.test.mjs
           node website/tests/integration/rehearse-reserve-import.mjs --collision-tests
           node website/tests/integration/rehearse-reserve-import.mjs --rollback
           PGDATABASE=veni_import_target_ci psql -X -v ON_ERROR_STOP=1 \
@@ -104,7 +110,9 @@ jobs:
 
           node website/tests/integration/rehearse-reserve-import.mjs --apply
           PGDATABASE=veni_import_target_ci psql -X -v ON_ERROR_STOP=1 \
-            -f website/tests/integration/reserve-import-rls-verify.sql
+            -f website/tests/integration/reserve-import-rls-verify.sql \
+            -f website/tests/integration/reserve-account-deletion-preflight-prototype.sql \
+            -f website/tests/integration/reserve-account-deletion-preflight-verify.sql
 
           node website/tests/integration/rehearse-reserve-import.mjs --reject-replay
       - name: Restore original Website data into a different disposable database
