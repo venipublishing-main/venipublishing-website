@@ -64,6 +64,16 @@ assert.deepEqual(json(after,rls),json(before,rls),'RLS settings changed in backu
 const policy=`SELECT coalesce(json_agg(row_to_json(p) ORDER BY schemaname,tablename,policyname),'[]'::json)::text
  FROM pg_policies p WHERE schemaname IN ('public','reserve','reserve_internal');`;
 assert.deepEqual(json(after,policy),json(before,policy),'RLS policy definitions changed');
+const applicationOwners=`SELECT coalesce(json_agg(json_build_object(
+  'schema',n.nspname,'object',c.relname,'owner',pg_get_userbyid(c.relowner))
+  ORDER BY n.nspname,c.relname),'[]'::json)::text
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+  WHERE c.relkind IN ('r','p','v','m','S')
+    AND n.nspname IN ('public','reserve','reserve_internal');`;
+assert.deepEqual(json(after,applicationOwners),json(before,applicationOwners),
+  'Veni application database object owners changed during restore');
+// Explicit self-grants can be omitted by pg_dump because matching owners
+// already hold those rights. Compare all *other* role grants semantically.
 const applicationGrants=`WITH grants AS (
  SELECT n.nspname AS schema_name, c.relname AS object_name,
    a.grantor::text, a.grantee::text, a.privilege_type, a.is_grantable
@@ -71,6 +81,7 @@ const applicationGrants=`WITH grants AS (
  CROSS JOIN LATERAL aclexplode(c.relacl) a
  WHERE c.relkind IN ('r','p','v','m','S')
    AND n.nspname IN ('public','reserve','reserve_internal')
+   AND a.grantee <> a.grantor
 ) SELECT coalesce(json_agg(row_to_json(g) ORDER BY schema_name,object_name,
  grantor,grantee,privilege_type,is_grantable),'[]'::json)::text FROM grants g;`;
 assert.deepEqual(json(after,applicationGrants),json(before,applicationGrants),
@@ -113,5 +124,5 @@ assert.equal(psql(after,`SELECT tgenabled FROM pg_trigger
 
 console.log('PASS: PostgreSQL application/Auth/Storage metadata dump restored to a separate clean database (Vault secret data intentionally excluded)');
 console.log(`PASS: ${originalTables.length} Auth/Website/Reserve/Storage table datasets match exactly`);
-console.log('PASS: RLS settings, policies, application grants, triggers, owner access, audit and deletion guard restored');
+console.log('PASS: RLS, policies, application ownership/external-role grants, triggers, owner access, audit and deletion guard restored');
 console.log('GATE OPEN: global roles, external Storage object bytes, Vault/root keys, Edge secrets, and GoTrue login against the clone still require separate evidence');
