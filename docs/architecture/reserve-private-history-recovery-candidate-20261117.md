@@ -33,8 +33,9 @@ executes using their real local Auth sessions:
    update and deny another tenant access. Publication remains closed.
 5. A third independent local Supabase/PostgreSQL stack receives a custom-format
    snapshot. The restore rebuilds only the three reviewed NOLOGIN Reserve
-   executors, reassigns their restricted functions, and removes temporary role
-   memberships and schema creation rights. The verifier compares full table
+   executors, reassigns their restricted functions to the *matching* source
+   owners, and removes temporary explicit grants and schema creation rights.
+   Role membership must match the source baseline exactly. The verifier compares full table
    digests, grants, RLS policies, trigger definitions, restricted role settings,
    and function ownership. It explicitly checks retained receipt, private
    settings and history, immutable event guards and zero published assignments.
