@@ -1,0 +1,101 @@
+name: Reserve tenant bootstrap in shared Website Auth (disposable only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-shared-bootstrap-candidate.yml'
+      - 'scripts/merge-reserve-bootstrap.mjs'
+      - 'tests/merge-reserve-bootstrap.test.mjs'
+      - 'tests/integration/reserve-shared-bootstrap-catalogue.sql'
+      - 'tests/integration/real-auth-shared-reserve-bootstrap.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-bootstrap-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      VENI_SHARED_BOOTSTRAP_DISPOSABLE: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      # Immutable Reserve OAuth draft contains M1, M2.1 and the M2.2 source
+      # candidate. The individual SQL source is additionally Git-blob pinned.
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: 33709007e19aa2359bb04720d11eac083737597f
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301
+          path: website-preview
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13
+        with:
+          version: 3.0.0
+      - name: Validate exact source and fail-closed converter
+        run: |
+          set -euo pipefail
+          supabase --version
+          supabase migration new --help
+          node --test website/tests/merge-reserve-m1.test.mjs website/tests/merge-reserve-m2.test.mjs website/tests/merge-reserve-bootstrap.test.mjs
+          node --check website/tests/integration/real-auth-shared-reserve-bootstrap.mjs
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/veni-m22-preview"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/veni-m22-preview"
+          node website/scripts/merge-reserve-bootstrap.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/veni-m22-preview"
+          test "$(find "$RUNNER_TEMP/veni-m22-preview" -maxdepth 1 -name 'preview-*.sql' | wc -l)" -eq 5
+      - name: Start fresh disposable local Supabase Auth and PostgREST
+        working-directory: website/tests/integration/real-auth-stack
+        run: |
+          set -euo pipefail
+          supabase migration new reserve_api_schema_bootstrap
+          shopt -s nullglob
+          files=(supabase/migrations/*_reserve_api_schema_bootstrap.sql)
+          test "${#files[@]}" -eq 1
+          cp ../real-auth-schema-bootstrap.sql "${files[0]}"
+          supabase start -x studio,realtime,storage,imgproxy,edge-runtime
+          supabase status -o env > "$RUNNER_TEMP/veni-bootstrap-local.env"
+      - name: Verify Website and Arcana remain intact through Reserve M2.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/veni-bootstrap-local.env"
+          set +a
+          case "$DB_URL" in
+            postgresql://*@127.0.0.1:54322/postgres|postgres://*@127.0.0.1:54322/postgres) ;;
+            *) echo 'Refusing any non-disposable database'; exit 1 ;;
+          esac
+          case "$API_URL" in
+            http://127.0.0.1:54321|http://localhost:54321) ;;
+            *) echo 'Refusing any non-disposable Auth API'; exit 1 ;;
+          esac
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f "$RUNNER_TEMP/veni-m22-preview/preview-1-m1a.sql" \
+            -f "$RUNNER_TEMP/veni-m22-preview/preview-2-m1b.sql" \
+            -f "$RUNNER_TEMP/veni-m22-preview/preview-3-m12.sql" \
+            -f "$RUNNER_TEMP/veni-m22-preview/preview-4-m21.sql" \
+            -f "$RUNNER_TEMP/veni-m22-preview/preview-5-m22-bootstrap.sql" \
+            -f website/tests/integration/reserve-shared-bootstrap-catalogue.sql
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
+          node website/tests/integration/real-auth-shared-reserve-bootstrap.mjs
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/reserve-shared-bootstrap-catalogue.sql
+      - name: Shut down disposable stack
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/real-auth-stack
+        run: supabase stop
