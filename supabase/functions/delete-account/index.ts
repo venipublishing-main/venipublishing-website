@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { reserveDeletionDecision } from "../_shared/reserve-account-deletion-policy.mjs";
+import { guardedAccountDeletion } from "../_shared/delete-account-guard.mjs";
 
 const allowedOrigins = new Set([
   "https://venipublishing-main.github.io",
@@ -53,36 +53,45 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // This flag is OFF unless the shared Reserve schema, self-only RPC and
-  // privacy workflow have been reviewed and explicitly enabled together.
-  // No hosted configuration change is made by this draft.
-  if (Deno.env.get("VENI_SHARED_RESERVE_DELETE_PREFLIGHT") === "enabled") {
-    // User JWT + invoker RLS, never service role: the RPC reads only the
-    // caller's Reserve projection and owner assignments, not arbitrary IDs.
-    const { data: state, error: preflightError } = await userClient.rpc(
-      "reserve_account_deletion_preflight"
-    );
-    const decision = reserveDeletionDecision(state, preflightError);
-    if (decision) {
-      return new Response(JSON.stringify({ error: decision.error, code: decision.code }), {
-        status: decision.status, headers: { ...cors, "Content-Type": "application/json" }
-      });
-    }
+  let requestBody;
+  try {
+    requestBody = await req.json();
+  } catch {
+    return new Response(JSON.stringify({
+      code: "DELETE_CONFIRMATION_REQUIRED",
+      error: "Type DELETE MY ACCOUNT and provide your current password."
+    }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
   }
 
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
+  // All privileged deletes use the trusted Auth user ID. There is no client-
+  // supplied target ID, and an unset Reserve preflight flag now fails closed.
+  const outcome = await guardedAccountDeletion({
+    enabled: Deno.env.get("VENI_SHARED_RESERVE_DELETE_PREFLIGHT"),
+    user: { id: user.id, email: user.email },
+    requestBody,
+    runPreflight: async () => userClient.rpc("reserve_account_deletion_preflight"),
+    reauthenticate: async (email, password) => {
+      // Verify the current password against this same Supabase Auth service.
+      // A refreshed JWT is not evidence of recent password verification.
+      const verifier = createClient(supabaseUrl, anonKey, {
+        auth: { persistSession: false, autoRefreshToken: false }
+      });
+      const { data, error } = await verifier.auth.signInWithPassword({ email, password });
+      return {
+        userId: data?.user?.id,
+        hasSession: Boolean(data?.session?.access_token),
+        error
+      };
+    },
+    deleteAuthenticatedUser: async (verifiedUserId) => {
+      const admin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false, autoRefreshToken: false }
+      });
+      return admin.auth.admin.deleteUser(verifiedUserId, false);
+    }
   });
 
-  const { error: deleteError } = await admin.auth.admin.deleteUser(user.id, false);
-  if (deleteError) {
-    console.error("delete-account failed", { userId: user.id, message: deleteError.message });
-    return new Response(JSON.stringify({ error: "We could not delete this account. Please try again." }), {
-      status: 500, headers: { ...cors, "Content-Type": "application/json" }
-    });
-  }
-
-  return new Response(JSON.stringify({ deleted: true }), {
-    status: 200, headers: { ...cors, "Content-Type": "application/json" }
+  return new Response(JSON.stringify(outcome.body), {
+    status: outcome.status, headers: { ...cors, "Content-Type": "application/json" }
   });
 });
