@@ -3,6 +3,7 @@
 // This does not connect to or modify any hosted Supabase instance.
 import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
+import {randomBytes} from 'node:crypto';
 import {readFileSync, writeFileSync, rmSync} from 'node:fs';
 import {basename,join} from 'node:path';
 
@@ -126,6 +127,8 @@ console.log('Native mount destinations (paths only): '+JSON.stringify(
   nativeAuth.Mounts.map(m=>m.Destination)));
 console.log('Native local Auth DB variable NAMES: '+JSON.stringify(
   [...env.keys()].filter(k=>/^(?:DATABASE_URL|DB_DATABASE_URL|GOTRUE_DB_)/.test(k)).sort()));
+console.log('Native JWT configuration variable NAMES: '+JSON.stringify(
+  [...env.keys()].filter(k=>/^(?:GOTRUE_JWT_|GOTRUE_API_JWT_)/.test(k)).sort()));
 
 // Preserve the source container's migration location and every non-DB runtime
 // option, while overriding *all* possible DB URL aliases to this disposable
@@ -140,6 +143,14 @@ env.set('GOTRUE_API_HOST','127.0.0.1');
 env.set('API_EXTERNAL_URL',`http://127.0.0.1:${port}`);
 env.set('GOTRUE_API_API_EXTERNAL_URL',`http://127.0.0.1:${port}`);
 env.set('GOTRUE_SITE_URL',`http://127.0.0.1:${port}`);
+// Supabase CLI local stacks can share a legacy HS256 signing secret even
+// when their gateway/API identity differs. A disaster-recovery service must
+// have its own, freshly generated signing authority and reject old tokens.
+// Keep this synthetic-only secret inside the ephemeral CI container/env file.
+env.set('GOTRUE_JWT_SECRET',randomBytes(48).toString('hex'));
+env.set('GOTRUE_JWT_KEYS','[]');
+env.delete('GOTRUE_JWT_KEY_ID');
+env.set('GOTRUE_JWT_ISSUER',`http://127.0.0.1:${port}`);
 // No attempt to suppress or forge schema_migrations. Run the exact GoTrue
 // migrator that the native CLI stack uses, then prove real password logins.
 env.delete('GOTRUE_DB_AUTOMIGRATE');
