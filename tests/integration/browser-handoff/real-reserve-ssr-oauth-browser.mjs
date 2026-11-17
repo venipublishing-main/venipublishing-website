@@ -479,21 +479,44 @@ try {
   const reconnectLink = page.getByRole('link', { name: 'Start local consent test' });
   check(await reconnectLink.isVisible(), 'Signed-out Reserve SSR still offers a fresh account link');
   console.log('RECOVERY: Reserve SSR is unverified and offers reconnect');
-  await Promise.all([
-    page.waitForURL(url => url.origin === WEBSITE &&
-      ['/account/authorize/', '/account/sign-in/'].includes(url.pathname),
-      { timeout: 30000 }),
-    reconnectLink.click(),
-  ]);
-  check(new URL(page.url()).pathname === '/account/authorize/',
-    'Website account resumes OAuth consent without entering a second password');
-  console.log('RECOVERY: redirected to Website consent using existing Website session');
-  await waitForConsent(page, syntheticUserId, actor.email);
-  await Promise.all([
-    page.waitForURL(url => url.origin === RESERVE && url.pathname === '/development/veni-account',
-      { timeout: 60000 }),
-    page.locator('[data-oauth-approve]').click(),
-  ]);
+  let freshCallbackSeen = false;
+  const observeRecoveryCallback = request => {
+    const u = new URL(request.url());
+    if (u.origin === RESERVE && u.pathname === '/auth/veni/callback' &&
+        u.searchParams.has('code') && u.searchParams.has('state')) {
+      freshCallbackSeen = true;
+    }
+  };
+  page.on('request', observeRecoveryCallback);
+  await reconnectLink.click();
+  let recoveryPath = '';
+  for (let attempt = 0; attempt < 150 && !recoveryPath; attempt++) {
+    const u = new URL(page.url());
+    if (u.origin === RESERVE && u.pathname === '/development/veni-account') {
+      recoveryPath = 'consent-reused';
+    } else if (u.origin === WEBSITE && u.pathname === '/account/authorize/' &&
+        await page.locator('[data-oauth-consent]').isVisible()) {
+      recoveryPath = 'consent-required';
+    } else if (u.origin === WEBSITE && u.pathname === '/account/sign-in/' &&
+        await page.locator('[data-sign-in-form]').isVisible()) {
+      recoveryPath = 'password-required';
+    } else {
+      await delay(100);
+    }
+  }
+  check(recoveryPath === 'consent-required' || recoveryPath === 'consent-reused',
+    'Existing Website account resumes OAuth without requiring a second password');
+  if (recoveryPath === 'consent-required') {
+    await waitForConsent(page, syntheticUserId, actor.email);
+    await Promise.all([
+      page.waitForURL(url => url.origin === RESERVE && url.pathname === '/development/veni-account',
+        { timeout: 60000 }),
+      page.locator('[data-oauth-approve]').click(),
+    ]);
+  }
+  page.off('request', observeRecoveryCallback);
+  check(freshCallbackSeen, 'Reauthorization travels through a fresh one-time Reserve OAuth callback');
+  console.log('RECOVERY: Website reauthorization completed with ' + recoveryPath);
   const reconnectedBody = await page.content();
   check(reconnectedBody.includes(syntheticUserId) && reconnectedBody.includes('not granted'),
     'Fresh OAuth approval restores the same verified UUID but no Reserve business authority');
