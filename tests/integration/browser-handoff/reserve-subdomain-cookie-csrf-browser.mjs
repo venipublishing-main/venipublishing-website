@@ -53,8 +53,11 @@ function send(res, status, data, type = 'text/plain; charset=utf-8', extra = {})
   res.end(data);
 }
 function html(res, markup, extra = {}) {
+  // A no-referrer document makes navigation-mode form POSTs send Origin: null,
+  // including legitimate same-origin forms. Strict-origin discloses no path/query
+  // while retaining an exact HTTPS Origin for the CSRF gate.
   send(res, 200, `<!doctype html><html lang="en"><meta charset="utf-8"><title>Disposable Veni cookie contract</title><body>${markup}</body></html>`,
-    'text/html; charset=utf-8', extra);
+    'text/html; charset=utf-8', { 'referrer-policy': 'strict-origin', ...extra });
 }
 function cookieSeen(req, name = SESSION, value = secret) {
   const pairs = (req.headers.cookie ?? '').split(';').map(x => x.trim());
@@ -241,16 +244,16 @@ try {
   console.log(`POLICY OBSERVATION: sibling POST cookie=${siblingPost?.credential ? 'present' : 'absent'}, ` +
     `origin=${siblingPost?.origin === ACCOUNT ? 'expected' : 'other'}, ` +
     `fetch-site=${siblingPost?.fetchSite === 'same-site' ? 'same-site' : 'other'}`);
-  check(siblingPost?.credential === true && siblingPost?.origin !== RESERVE,
-    'Chromium sends Lax on sibling-site POST, but an untrusted Origin cannot authorize a write');
+  check(siblingPost?.credential === true && siblingPost?.origin === ACCOUNT,
+    'Chromium sends Lax on sibling-site POST with untrusted Website Origin; explicit Origin/CSRF is essential');
   check(observed.at(-1)?.fetchSite === 'same-site',
     'Browser marks sibling-host POST as same-site, not cross-site');
 
   phase = 'true cross-site form POST and safe top-level navigation';
   check(await submit(page, `${ATTACKER}/trap`) === 403 && mutations === 0,
     'External-site form submission cannot modify Reserve state');
-  check(observed.at(-1)?.credential === false && observed.at(-1)?.origin !== RESERVE,
-    'Explicit SameSite=Lax omits cookie on cross-site POST; non-Reserve Origin cannot authorize writes');
+  check(observed.at(-1)?.credential === false && observed.at(-1)?.origin === ATTACKER,
+    'Explicit SameSite=Lax omits cookie on cross-site POST while preserving the attacker Origin');
   await page.goto(`${ATTACKER}/callback-link`);
   await Promise.all([
     page.waitForURL(url => url.origin === RESERVE && url.pathname === '/callback'),
