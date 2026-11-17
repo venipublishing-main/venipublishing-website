@@ -69,6 +69,9 @@ Deno.serve(async (req: Request) => {
     enabled: Deno.env.get("VENI_SHARED_RESERVE_DELETE_PREFLIGHT"),
     user: { id: user.id, email: user.email },
     requestBody,
+    // The initiating JWT must still own a live auth.sessions row, even if its
+    // signature and auth.getUser() remain valid after a session is revoked.
+    checkActiveSession: async () => userClient.rpc("veni_account_active_session"),
     runPreflight: async () => userClient.rpc("reserve_account_deletion_preflight"),
     reauthenticate: async (email, password) => {
       // Verify the current password against this same Supabase Auth service.

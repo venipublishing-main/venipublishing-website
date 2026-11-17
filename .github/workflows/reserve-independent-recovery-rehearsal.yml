@@ -7,6 +7,7 @@ on:
       - 'tests/integration/integrated-auth-recovery/**'
       - 'tests/integration/verify-independent-supabase-recovery.mjs'
       - 'tests/integration/real-auth-reserve-integrated-rehearsal.mjs'
+      - 'tests/integration/veni-account-active-session-prototype.sql'
 
 permissions:
   contents: read
@@ -101,7 +102,8 @@ jobs:
             -f "$RUNNER_TEMP/integrated-recovery-preview/preview-2-m1b.sql" \
             -f "$RUNNER_TEMP/integrated-recovery-preview/preview-3-m12.sql" \
             -f "$RUNNER_TEMP/integrated-recovery-preview/preview-4-m21.sql" \
-            -f website/tests/integration/reserve-account-deletion-preflight-prototype.sql
+            -f website/tests/integration/reserve-account-deletion-preflight-prototype.sql \
+            -f website/tests/integration/veni-account-active-session-prototype.sql
           psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
           export VENI_EXPORT_SYNTHETIC_RECOVERY_ACCOUNTS=yes
           export VENI_SYNTHETIC_RECOVERY_ACCOUNTS_FILE="$RUNNER_TEMP/veni-recovery-accounts.json"

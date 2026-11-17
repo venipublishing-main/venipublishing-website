@@ -317,15 +317,37 @@ assert.ok((await request(target,'/rest/v1/rpc/reserve_account_deletion_preflight
 })).status>=400,'Anonymous deletion preflight must be denied');
 console.log('PASS: deletion preflight protects owners/history through genuine migrated Website sessions');
 
+// The caller's signed JWT alone is not a live-session proof. The RPC checks
+// its *own* session_id against auth.sessions through the real PostgREST API.
+async function sessionLive(token) {
+  return ok(target,'/rest/v1/rpc/veni_account_active_session',{
+    method:'POST',token,body:{},
+  });
+}
+for(const token of [websiteToken,...Object.values(tokens)]) {
+  assert.equal(await sessionLive(token),true,'Signed-in actor must have a live session');
+}
+assert.ok((await request(target,'/rest/v1/rpc/veni_account_active_session',{
+  method:'POST',body:{},
+})).status>=400,'Anonymous clients cannot invoke privileged session lookup');
+console.log('PASS: self-only active-session RPC allows genuine sessions, denies anonymous callers');
+
 // Execute the SAME checked deletion orchestrator as the drafted Edge Function,
 // against genuine disposable local GoTrue/PostgREST. No hosted API can pass
 // the loopback/port guards above, and the admin key comes from local CLI.
 async function attemptLocalDelete(account, token, password) {
-  const calls={preflight:0, password:0, admin:0};
+  const calls={session:0, preflight:0, password:0, admin:0};
   const outcome=await guardedAccountDeletion({
     enabled:'enabled',
     user:{id:account.id,email:account.email},
     requestBody:{confirmation:'DELETE MY ACCOUNT',password},
+    checkActiveSession:async()=>{
+      calls.session++;
+      const response=await request(target,'/rest/v1/rpc/veni_account_active_session',{
+        method:'POST',token,body:{},
+      });
+      return {data:response.data,error:response.status>=200 && response.status<300 ? null : Error('local session RPC unavailable')};
+    },
     runPreflight:async()=>{
       calls.preflight++;
       const response=await request(target,'/rest/v1/rpc/reserve_account_deletion_preflight',{
@@ -359,7 +381,7 @@ async function attemptLocalDelete(account, token, password) {
 for(const kind of ['owner_a','owner_b','staff','unassigned']) {
   const blocked=await attemptLocalDelete(actors[kind],tokens[kind],actors[kind].password);
   assert.equal(blocked.outcome.status,409,`${kind} should be blocked`);
-  assert.deepEqual(blocked.calls,{preflight:1,password:0,admin:0});
+  assert.deepEqual(blocked.calls,{session:1,preflight:1,password:0,admin:0});
 }
 
 // One newly created disposable Website-only identity can be deleted. The
@@ -368,12 +390,31 @@ const disposable={email:`to-delete-${tag}@example.invalid`,password:`Delete-CI-$
 await signup(target,disposable);
 assert.equal(targetCount().auth,7);
 assert.equal(targetCount().profiles,7);
-const disposableToken=await signin(target,disposable);
+let disposableToken=await signin(target,disposable);
 assert.equal(await deletionState(disposableToken),'RESERVE_CLEAR');
 const deniedPassword=await attemptLocalDelete(disposable,disposableToken,'incorrect-password');
 assert.equal(deniedPassword.outcome.status,401);
-assert.deepEqual(deniedPassword.calls,{preflight:1,password:1,admin:0});
+assert.deepEqual(deniedPassword.calls,{session:1,preflight:1,password:1,admin:0});
 assert.equal(scalar(target.db,`SELECT count(*) FROM auth.users WHERE id=${sqlLiteral(disposable.id)};`),'1');
+
+// Revoke the *requesting* session while keeping its signed JWT. The client can
+// still present the JWT until expiry, but the account-deletion guard MUST deny
+// it before asking for a password or attempting an admin operation.
+const revokedClaims=JSON.parse(Buffer.from(disposableToken.split('.')[1],'base64url').toString('utf8'));
+assert.equal(revokedClaims.sub,disposable.id);
+assert.match(revokedClaims.session_id,UUID);
+assert.equal(await sessionLive(disposableToken),true);
+assert.equal(scalar(target.db,`SELECT count(*) FROM auth.sessions WHERE id=${sqlLiteral(revokedClaims.session_id)}::uuid AND user_id=${sqlLiteral(disposable.id)}::uuid;`),'1');
+psql(target.db,`DELETE FROM auth.sessions WHERE id=${sqlLiteral(revokedClaims.session_id)}::uuid AND user_id=${sqlLiteral(disposable.id)}::uuid;`);
+assert.equal(await sessionLive(disposableToken),false);
+const revoked=await attemptLocalDelete(disposable,disposableToken,disposable.password);
+assert.equal(revoked.outcome.status,401);
+assert.equal(revoked.outcome.body.code,'ACCOUNT_SESSION_NOT_ACTIVE');
+assert.deepEqual(revoked.calls,{session:1,preflight:0,password:0,admin:0});
+assert.equal(scalar(target.db,`SELECT count(*) FROM auth.users WHERE id=${sqlLiteral(disposable.id)};`),'1');
+disposableToken=await signin(target,disposable);
+assert.equal(await sessionLive(disposableToken),true);
+console.log('PASS: revoked session JWT cannot delete account; fresh login restores eligibility');
 
 // An ordinary user JWT cannot invoke the Auth admin endpoint directly.
 const deniedAdmin=await request(target,`/auth/v1/admin/users/${disposable.id}`,{
@@ -385,7 +426,7 @@ assert.equal(scalar(target.db,`SELECT count(*) FROM auth.users WHERE id=${sqlLit
 
 const deleted=await attemptLocalDelete(disposable,disposableToken,disposable.password);
 assert.deepEqual(deleted.outcome,{status:200,body:{deleted:true}});
-assert.deepEqual(deleted.calls,{preflight:2,password:1,admin:1});
+assert.deepEqual(deleted.calls,{session:2,preflight:2,password:1,admin:1});
 assert.equal(scalar(target.db,`SELECT count(*) FROM auth.users WHERE id=${sqlLiteral(disposable.id)};`),'0');
 assert.equal(scalar(target.db,`SELECT count(*) FROM auth.identities WHERE user_id=${sqlLiteral(disposable.id)};`),'0');
 assert.equal(scalar(target.db,`SELECT count(*) FROM public.profiles WHERE id=${sqlLiteral(disposable.id)};`),'0');
