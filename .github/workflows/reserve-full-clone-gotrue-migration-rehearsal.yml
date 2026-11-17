@@ -170,8 +170,9 @@ jobs:
           psql "$RECOVERY_DB_URL" -X -v ON_ERROR_STOP=1 -c \
             "ALTER ROLE reserve_settings_executor SET search_path = '';"
           psql "$TARGET_DB_URL" -X -A -t -v ON_ERROR_STOP=1 -c "
-            SELECT format('ALTER FUNCTION %I.%I(%s) OWNER TO reserve_settings_executor;',
-              n.nspname,p.proname,pg_get_function_identity_arguments(p.oid))
+            SELECT format('ALTER FUNCTION %I.%I(%s) OWNER TO %I;',
+              n.nspname,p.proname,pg_get_function_identity_arguments(p.oid),
+              pg_get_userbyid(p.proowner))
             FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
             WHERE n.nspname IN ('reserve','reserve_internal','public')
               AND pg_get_userbyid(p.proowner) IN (
