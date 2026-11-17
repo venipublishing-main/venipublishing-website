@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'tests/integration/browser-handoff/real-reserve-ssr-oauth-browser.mjs'
+      - 'tests/integration/browser-handoff/reserve-subdomain-cookie-csrf-browser.mjs'
       - '.github/workflows/veni-account-reserve-ssr-browser-rehearsal.yml'
   workflow_dispatch:
 
@@ -82,6 +83,12 @@ jobs:
       - name: Real Website consent to real Reserve SSR browser proof
         run: node website/tests/integration/browser-handoff/real-reserve-ssr-oauth-browser.mjs
         timeout-minutes: 7
+
+      - name: HTTPS subdomain cookie and CSRF policy browser contract
+        env:
+          VENI_SUBDOMAIN_BROWSER_DISPOSABLE: 'yes'
+        run: node website/tests/integration/browser-handoff/reserve-subdomain-cookie-csrf-browser.mjs
+        timeout-minutes: 3
 
       - name: Stop only disposable Reserve-local Docker project
         if: ${{ always() }}
