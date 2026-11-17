@@ -74,7 +74,7 @@ for(const [label,db] of [['original target',target],['full clone',clone]]){
 const containers=command('docker',['ps','--format','{{json .}}']).split('\n')
   .filter(Boolean).map(line=>JSON.parse(line));
 const candidates=containers.filter(x=>x.Names.includes('auth') &&
-  x.Names.includes('integrated-auth-recovery'));
+  x.Names.includes('veni_integrated_website_recovery_ci'));
 assert.equal(candidates.length,1,
   `Expected exactly one local third-stack GoTrue container; found ${candidates.length}`);
 const nativeAuth=JSON.parse(command('docker',['inspect',candidates[0].ID]))[0];
