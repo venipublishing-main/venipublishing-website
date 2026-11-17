@@ -30,7 +30,7 @@ The cross-region and PostgreSQL patch difference is real: local PostgreSQL 17 co
 | `auth.users` | **1** | **5** |
 | `auth.identities` | 1 | 5 |
 | Identity provider distribution | 1 email | 5 email |
-| Accounts with usable password hashes | 1 | 5 |
+| Accounts with a non-empty password-hash field | 1 | 5 |
 | Email-confirmed accounts | 1 | 5 |
 | MFA factors | 0 | 0 |
 | `auth.sessions` records | 2 | 0 |
