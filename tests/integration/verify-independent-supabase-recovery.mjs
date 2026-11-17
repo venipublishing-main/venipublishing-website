@@ -118,7 +118,9 @@ if(phase==='database'){
     assert.equal(roleConfig.login,false);
     assert.equal(roleConfig.superuser,false);
     assert.equal(roleConfig.bypass_rls,false);
-    assert.equal(roleConfig.postgres_member,0);
+    // PostgreSQL role-creation membership behaviour is version-dependent.
+    // Compare the exact source and restored grant/membership catalogue above;
+    // a hard-coded zero would reject an unchanged original role contract.
   }
   // PostgreSQL role OIDs may differ between servers: compare role *names*,
   // excluding redundant owner self-grants, not raw OIDs.
