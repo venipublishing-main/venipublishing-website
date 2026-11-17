@@ -11,7 +11,8 @@ for(const flag of ['VENI_DUAL_AUTH_DISPOSABLE','VENI_ATOMIC_RESERVE_REHEARSAL',
   assert.equal(process.env[flag],'yes',`Missing explicit local-only gate ${flag}`);
 }
 const temp=process.env.RUNNER_TEMP;
-assert.ok(temp?.startsWith('/home/runner/work/_temp/'),'GitHub Actions runner temp required');
+assert.ok(temp==='/home/runner/work/_temp' ||
+  temp?.startsWith('/home/runner/work/_temp/'),'GitHub Actions runner temp required');
 const credentialsPath=process.env.VENI_SYNTHETIC_RECOVERY_ACCOUNTS_FILE;
 assert.ok(credentialsPath?.startsWith(`${temp}/veni-recovery-`),'Runner-only fixture required');
 const fixture=JSON.parse(readFileSync(credentialsPath,'utf8'));
