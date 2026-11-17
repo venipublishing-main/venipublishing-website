@@ -2,7 +2,7 @@
 // directly on a complete, independently restored synthetic Website/Reserve DB.
 // This does not connect to or modify any hosted Supabase instance.
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {readFileSync, writeFileSync, rmSync} from 'node:fs';
 import {basename,join} from 'node:path';
 
@@ -135,10 +135,13 @@ const file=join(temp,`veni-gotrue-full-clone-${process.pid}.env`);
 const name=`veni-gotrue-clone-${process.pid}`;
 let started=false;
 function sanitizedLog(){
-  let output='';
-  try{output=command('docker',['logs','--tail','18',name]);}catch(e){
-    output=String(e.stderr||'');
-  }
+  // Docker streams GoTrue's structured logs on stderr even when its `logs`
+  // command succeeds. Capture both streams, then print only bounded,
+  // redacted diagnostic lines, never entire output or environment values.
+  const result=spawnSync('docker',['logs','--tail','18',name],{
+    encoding:'utf8',timeout:20000,maxBuffer:256*1024,
+  });
+  const output=`${result.stdout||''}\n${result.stderr||''}`;
   const lines=output.split('\n').filter(x=>
     /migration|oauth|SQLSTATE|error|fatal|database/i.test(x));
   const redacted=lines.slice(-5).map(line=>line
