@@ -1,0 +1,11 @@
+.veni-oauth-summary{margin:1rem 0 1.25rem;padding:1rem;background:#f7f0e2;border:1px solid rgba(23,32,29,.14);border-radius:.4rem}
+.veni-oauth-summary dt{font-size:.67rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:#806025;margin-top:.7rem}
+.veni-oauth-summary dt:first-child{margin-top:0}
+.veni-oauth-summary dd{margin:.18rem 0 0;color:#17201d;overflow-wrap:anywhere}
+.veni-oauth-scope-list{padding-left:1.2rem;margin:.55rem 0 1.2rem;color:#33433d}
+.veni-oauth-scope-list li{margin:.32rem 0}
+.veni-oauth-actions{display:flex;flex-wrap:wrap;gap:.7rem;justify-content:center;margin:1.4rem 0 .7rem}
+.veni-oauth-actions button{min-width:145px}
+.veni-oauth-actions button:disabled{opacity:.6;cursor:wait}
+.veni-oauth-caution{font-size:.77rem;color:#5e655f;text-align:center}
+.veni-oauth-consent .account-status{text-align:center}

@@ -1,0 +1,137 @@
+name: Reserve shared M2 catalogue (genuine local Auth)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-shared-m2-catalogue-candidate.yml'
+      - 'tests/integration/real-auth-reserve-m2-shared.mjs'
+      - 'tests/integration/reserve-shared-m2-catalogue-verify.sql'
+      - 'tests/integration/real-auth-stack/**'
+      - 'tests/integration/real-auth-shared-reserve-theme.mjs'
+      - 'assets/js/veni-oauth-*'
+      - 'account/authorize/**'
+      - 'scripts/merge-reserve-bootstrap.mjs'
+      - 'scripts/merge-reserve-theme.mjs'
+      - 'supabase/migrations/20261117*_reserve_shared_*.sql'
+
+permissions:
+  contents: read
+
+jobs:
+  shared-reserve-catalogue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      VENI_SHARED_THEME_DISPOSABLE: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: c47c88dcf98926f4699d5c3673557e2a68d8feb2 # shared Reserve Worker and tenant catalogue
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301 # Arcana pilot fixture
+          path: website-preview
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: reserve/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3 action commit
+        with:
+          version: 2.122.0
+      - name: Verify pinned SQL conversions without hosted credentials
+        run: |
+          set -euo pipefail
+          supabase --version
+          supabase start --help > /dev/null
+          supabase migration new --help > /dev/null
+          node --check website/tests/integration/real-auth-reserve-m2-shared.mjs
+          node --test website/tests/merge-reserve-m1.test.mjs website/tests/merge-reserve-m2.test.mjs website/tests/merge-reserve-bootstrap.test.mjs website/tests/merge-reserve-theme.test.mjs
+          node --test website/tests/veni-oauth-consent.test.mjs
+          node reserve/scripts/preview-shared-account-m2.mjs --verify
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/shared-m2-foundation"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/shared-m2-foundation"
+          node website/scripts/merge-reserve-bootstrap.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/shared-m2-foundation"
+          node website/scripts/merge-reserve-theme.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/shared-m2-foundation"
+          node reserve/scripts/preview-shared-account-m2.mjs --preview-dir "$RUNNER_TEMP/shared-m2-catalogue"
+          # Deployment inputs must be byte-for-byte equivalent to the approved
+          # immutable converters after their first provenance comment.
+          for spec in \
+            'foundation/preview-1-m1a.sql 20261117160650_reserve_shared_tenant_core.sql' \
+            'foundation/preview-2-m1b.sql 20261117160716_reserve_shared_roles_audit.sql' \
+            'foundation/preview-3-m12.sql 20261117160729_reserve_shared_rls.sql' \
+            'foundation/preview-4-m21.sql 20261117160741_reserve_shared_business_settings.sql' \
+            'foundation/preview-5-m22-bootstrap.sql 20261117160759_reserve_shared_bootstrap.sql' \
+            'foundation/preview-6-m7-private-theme.sql 20261117160810_reserve_shared_private_theme.sql' \
+            'catalogue/preview-m23-location.sql 20261117160831_reserve_shared_locations.sql' \
+            'catalogue/preview-m24-service.sql 20261117160843_reserve_shared_services.sql' \
+            'catalogue/preview-m25-staff.sql 20261117160855_reserve_shared_staff_eligibility.sql'; do
+            read -r source target <<< "$spec"
+            case "$source" in
+              foundation/*) src="$RUNNER_TEMP/shared-m2-foundation/${source#foundation/}" ;;
+              catalogue/*) src="$RUNNER_TEMP/shared-m2-catalogue/${source#catalogue/}" ;;
+            esac
+            diff -u <(tail -n +2 "$src") <(tail -n +2 "website/supabase/migrations/$target")
+          done
+      - name: Start isolated Supabase Auth and PostgREST on loopback
+        working-directory: website/tests/integration/real-auth-stack
+        run: |
+          set -euo pipefail
+          supabase migration new reserve_api_schema_bootstrap
+          shopt -s nullglob
+          generated=(supabase/migrations/*_reserve_api_schema_bootstrap.sql)
+          test "${#generated[@]}" -eq 1
+          cp ../real-auth-schema-bootstrap.sql "${generated[0]}"
+          supabase start -x studio,realtime,storage-api,imgproxy,edge-runtime
+          supabase status -o env > "$RUNNER_TEMP/local-supabase.env"
+      - name: Apply Website, Arcana, Reserve bootstrap, Theme and full M2 catalogue to disposable database
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/local-supabase.env"
+          set +a
+          case "$DB_URL" in
+            postgresql://*@127.0.0.1:56322/postgres|postgres://*@127.0.0.1:56322/postgres) ;;
+            *) echo 'Refusing nonlocal database'; exit 1 ;;
+          esac
+          case "$API_URL" in
+            http://127.0.0.1:56321|http://localhost:56321) ;;
+            *) echo 'Refusing nonlocal API'; exit 1 ;;
+          esac
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f website/supabase/migrations/20261117160650_reserve_shared_tenant_core.sql \
+            -f website/supabase/migrations/20261117160716_reserve_shared_roles_audit.sql \
+            -f website/supabase/migrations/20261117160729_reserve_shared_rls.sql \
+            -f website/supabase/migrations/20261117160741_reserve_shared_business_settings.sql \
+            -f website/supabase/migrations/20261117160759_reserve_shared_bootstrap.sql \
+            -f website/supabase/migrations/20261117160810_reserve_shared_private_theme.sql \
+            -f website/supabase/migrations/20261117160831_reserve_shared_locations.sql \
+            -f website/supabase/migrations/20261117160843_reserve_shared_services.sql \
+            -f website/supabase/migrations/20261117160855_reserve_shared_staff_eligibility.sql
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
+          node website/tests/integration/real-auth-reserve-m2-shared.mjs
+          node website/tests/integration/real-auth-shared-reserve-theme.mjs
+      - name: Verify real Reserve Worker sign-in and tenant workspace
+        working-directory: reserve
+        run: |
+          pnpm install --frozen-lockfile
+          node local/shared-workspace-smoke.mjs ../website/tests/integration/real-auth-stack
+      - name: Stop disposable Supabase only
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/real-auth-stack
+        run: supabase stop

@@ -1,9 +1,5 @@
--- Veni Publishing / Reserve: M1 shared-project transfer candidate, 2026-11-17.
--- Source: venipublishing-main/veni-reserve main, exact Git blobs pinned in Website PR #2.
--- Destination: droslqfcazwkwvqlbtsq, namespace reserve / reserve_internal.
--- Not automatically deployable: held outside supabase/migrations until hosted approval.
--- Does NOT copy staging tenants, test accounts, Auth identities, or user records.
--- Run only once on reviewed, backed-up destination after explicit hosted-write approval.
+-- Archived PR #26 candidate. Primary already has these objects in the versioned migrations.
+-- Do not apply this historical bundle to the primary database.
 begin;
 create schema if not exists reserve;
 revoke all on schema reserve from public, anon, authenticated, service_role;
