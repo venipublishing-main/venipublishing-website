@@ -92,14 +92,14 @@ jobs:
             -f "$RUNNER_TEMP/veni-m7-preview/preview-3-m12.sql" \
             -f "$RUNNER_TEMP/veni-m7-preview/preview-4-m21.sql" \
             -f "$RUNNER_TEMP/veni-m7-preview/preview-5-m22-bootstrap.sql" \
+            -f website/tests/integration/reserve-shared-bootstrap-catalogue.sql
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
             -f "$RUNNER_TEMP/veni-m7-preview/preview-6-m7-private-theme.sql" \
-            -f website/tests/integration/reserve-shared-bootstrap-catalogue.sql \
             -f website/tests/integration/reserve-shared-theme-catalogue.sql
           psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
           node website/tests/integration/real-auth-shared-reserve-bootstrap.mjs
           node website/tests/integration/real-auth-shared-reserve-theme.mjs
           psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
-            -f website/tests/integration/reserve-shared-bootstrap-catalogue.sql \
             -f website/tests/integration/reserve-shared-theme-catalogue.sql
       - name: Shut down disposable stack
         if: always()
