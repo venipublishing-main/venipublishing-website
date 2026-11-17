@@ -22,6 +22,8 @@ on:
       - 'tests/integration/real-auth-schema-bootstrap.sql'
       - 'tests/integration/reserve-account-deletion-preflight-prototype.sql'
       - 'tests/integration/veni-account-active-session-prototype.sql'
+      - 'tests/integration/browser-handoff/**'
+      - 'docs/architecture/veni-account-two-origin-browser-evidence-20261117.md'
       - 'scripts/merge-reserve-m1.mjs'
       - 'scripts/merge-reserve-m2.mjs'
 
@@ -188,6 +190,22 @@ jobs:
 
           node website/tests/integration/verify-integrated-restored-clone.mjs
           # Backup remains runner-private, never uploaded as a workflow artifact.
+      - name: Prove two browser origins against disposable shared Auth (no SSO claim)
+        env:
+          VENI_BROWSER_REAL_AUTH: 'yes'
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/veni-integrated-target.env"
+          TARGET_API_URL="$API_URL"
+          TARGET_ANON_KEY="$ANON_KEY"
+          set +a
+          export TARGET_API_URL TARGET_ANON_KEY
+          node --check website/tests/integration/browser-handoff/shared-auth-two-origin-browser.mjs
+          npm ci --prefix website/tests/integration/browser-handoff --no-audit --no-fund
+          website/tests/integration/browser-handoff/node_modules/.bin/playwright install --with-deps chromium
+          node website/tests/integration/browser-handoff/shared-auth-two-origin-browser.mjs
+
       - name: Stop local Reserve SOURCE
         if: always()
         continue-on-error: true
