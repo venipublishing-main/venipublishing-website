@@ -1,4 +1,4 @@
--- Veni Publishing production migration: reviewed pinned Reserve source (catalogue/preview-m24-service.sql); additively isolated under reserve, reserve_internal and namespaced RPCs.
+-- Veni Publishing production migration: reviewed pinned Reserve source (catalogue/preview-m24-service.sql); additively isolated under reserve, reserve_internal and namespaced RPCs. Applied as Supabase migration version 20261117160843.
 -- Integration, local real-Auth/RLS testing and owner approval are required.
 -- M2.4: tenant-owned Service catalogue, following Location.
 -- Candidate for disposable local Supabase only; no hosted release or booking.

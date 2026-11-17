@@ -1,4 +1,4 @@
--- Veni Publishing production migration: reviewed pinned Reserve source (foundation/preview-5-m22-bootstrap.sql); additively isolated under reserve, reserve_internal and namespaced RPCs.
+-- Veni Publishing production migration: reviewed pinned Reserve source (foundation/preview-5-m22-bootstrap.sql); additively isolated under reserve, reserve_internal and namespaced RPCs. Applied as Supabase migration version 20261117160759.
 -- Issue 18: source-controlled candidate; disposable local replay only.
 begin;
 create function reserve_internal.authenticated_session_user() returns uuid

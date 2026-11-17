@@ -1,4 +1,4 @@
--- Veni Publishing production migration: reviewed pinned Reserve source (foundation/preview-1-m1a.sql); additively isolated under reserve, reserve_internal and namespaced RPCs.
+-- Veni Publishing production migration: reviewed pinned Reserve source (foundation/preview-1-m1a.sql); additively isolated under reserve, reserve_internal and namespaced RPCs. Applied as Supabase migration version 20261117160650.
 begin;
 create schema if not exists reserve;
 revoke all on schema reserve from public, anon, authenticated, service_role;

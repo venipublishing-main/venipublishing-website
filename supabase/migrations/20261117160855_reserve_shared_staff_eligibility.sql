@@ -1,4 +1,4 @@
--- Veni Publishing production migration: reviewed pinned Reserve source (catalogue/preview-m25-staff.sql); additively isolated under reserve, reserve_internal and namespaced RPCs.
+-- Veni Publishing production migration: reviewed pinned Reserve source (catalogue/preview-m25-staff.sql); additively isolated under reserve, reserve_internal and namespaced RPCs. Applied as Supabase migration version 20261117160855.
 -- Integration, local real-Auth/RLS testing and owner approval are required.
 -- M2.5: Staff profiles and explicit Staff/Service/Location eligibility.
 -- Disposable local Supabase only; no hosted rollout, Auth linking or booking.

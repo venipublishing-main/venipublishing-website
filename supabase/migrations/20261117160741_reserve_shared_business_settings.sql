@@ -1,4 +1,4 @@
--- Veni Publishing production migration: reviewed pinned Reserve source (foundation/preview-4-m21.sql); additively isolated under reserve, reserve_internal and namespaced RPCs.
+-- Veni Publishing production migration: reviewed pinned Reserve source (foundation/preview-4-m21.sql); additively isolated under reserve, reserve_internal and namespaced RPCs. Applied as Supabase migration version 20261117160741.
 -- AR-032/033. One bounded caller-authorized operation, no direct relation API.
 begin;
 create role reserve_settings_executor nologin nosuperuser nobypassrls nocreatedb nocreaterole noreplication noinherit;

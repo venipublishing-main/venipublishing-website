@@ -1,4 +1,4 @@
--- Veni Publishing production migration: reviewed pinned Reserve source (catalogue/preview-m23-location.sql); additively isolated under reserve, reserve_internal and namespaced RPCs.
+-- Veni Publishing production migration: reviewed pinned Reserve source (catalogue/preview-m23-location.sql); additively isolated under reserve, reserve_internal and namespaced RPCs. Applied as Supabase migration version 20261117160831.
 -- Integration, local real-Auth/RLS testing and owner approval are required.
 -- M2.3: first persistent business-graph node (Location).
 -- Candidate for disposable local Supabase only; never apply to hosted projects

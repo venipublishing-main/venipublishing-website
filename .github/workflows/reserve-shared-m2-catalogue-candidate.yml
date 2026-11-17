@@ -59,15 +59,15 @@ jobs:
           # Deployment inputs must be byte-for-byte equivalent to the approved
           # immutable converters after their first provenance comment.
           for spec in \
-            'foundation/preview-1-m1a.sql 20261117160001_reserve_shared_tenant_core.sql' \
-            'foundation/preview-2-m1b.sql 20261117160002_reserve_shared_roles_audit.sql' \
-            'foundation/preview-3-m12.sql 20261117160003_reserve_shared_rls.sql' \
-            'foundation/preview-4-m21.sql 20261117160004_reserve_shared_business_settings.sql' \
-            'foundation/preview-5-m22-bootstrap.sql 20261117160005_reserve_shared_bootstrap.sql' \
-            'foundation/preview-6-m7-private-theme.sql 20261117160006_reserve_shared_private_theme.sql' \
-            'catalogue/preview-m23-location.sql 20261117160007_reserve_shared_locations.sql' \
-            'catalogue/preview-m24-service.sql 20261117160008_reserve_shared_services.sql' \
-            'catalogue/preview-m25-staff.sql 20261117160009_reserve_shared_staff_eligibility.sql'; do
+            'foundation/preview-1-m1a.sql 20261117160650_reserve_shared_tenant_core.sql' \
+            'foundation/preview-2-m1b.sql 20261117160716_reserve_shared_roles_audit.sql' \
+            'foundation/preview-3-m12.sql 20261117160729_reserve_shared_rls.sql' \
+            'foundation/preview-4-m21.sql 20261117160741_reserve_shared_business_settings.sql' \
+            'foundation/preview-5-m22-bootstrap.sql 20261117160759_reserve_shared_bootstrap.sql' \
+            'foundation/preview-6-m7-private-theme.sql 20261117160810_reserve_shared_private_theme.sql' \
+            'catalogue/preview-m23-location.sql 20261117160831_reserve_shared_locations.sql' \
+            'catalogue/preview-m24-service.sql 20261117160843_reserve_shared_services.sql' \
+            'catalogue/preview-m25-staff.sql 20261117160855_reserve_shared_staff_eligibility.sql'; do
             read -r source target <<< "$spec"
             case "$source" in
               foundation/*) src="$RUNNER_TEMP/shared-m2-foundation/${source#foundation/}" ;;
@@ -105,15 +105,15 @@ jobs:
             -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
             -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
             -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
-            -f website/supabase/migrations/20261117160001_reserve_shared_tenant_core.sql \
-            -f website/supabase/migrations/20261117160002_reserve_shared_roles_audit.sql \
-            -f website/supabase/migrations/20261117160003_reserve_shared_rls.sql \
-            -f website/supabase/migrations/20261117160004_reserve_shared_business_settings.sql \
-            -f website/supabase/migrations/20261117160005_reserve_shared_bootstrap.sql \
-            -f website/supabase/migrations/20261117160006_reserve_shared_private_theme.sql \
-            -f website/supabase/migrations/20261117160007_reserve_shared_locations.sql \
-            -f website/supabase/migrations/20261117160008_reserve_shared_services.sql \
-            -f website/supabase/migrations/20261117160009_reserve_shared_staff_eligibility.sql
+            -f website/supabase/migrations/20261117160650_reserve_shared_tenant_core.sql \
+            -f website/supabase/migrations/20261117160716_reserve_shared_roles_audit.sql \
+            -f website/supabase/migrations/20261117160729_reserve_shared_rls.sql \
+            -f website/supabase/migrations/20261117160741_reserve_shared_business_settings.sql \
+            -f website/supabase/migrations/20261117160759_reserve_shared_bootstrap.sql \
+            -f website/supabase/migrations/20261117160810_reserve_shared_private_theme.sql \
+            -f website/supabase/migrations/20261117160831_reserve_shared_locations.sql \
+            -f website/supabase/migrations/20261117160843_reserve_shared_services.sql \
+            -f website/supabase/migrations/20261117160855_reserve_shared_staff_eligibility.sql
           psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
           node website/tests/integration/real-auth-reserve-m2-shared.mjs
           node website/tests/integration/real-auth-shared-reserve-theme.mjs

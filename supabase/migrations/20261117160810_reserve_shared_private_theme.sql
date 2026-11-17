@@ -1,4 +1,4 @@
--- Veni Publishing production migration: reviewed pinned Reserve source (foundation/preview-6-m7-private-theme.sql); additively isolated under reserve, reserve_internal and namespaced RPCs.
+-- Veni Publishing production migration: reviewed pinned Reserve source (foundation/preview-6-m7-private-theme.sql); additively isolated under reserve, reserve_internal and namespaced RPCs. Applied as Supabase migration version 20261117160810.
 -- M7 foundation, local only: stable Themes and immutable, private draft snapshots.
 -- No public assignment or asset upload operation is exposed by this migration.
 begin;

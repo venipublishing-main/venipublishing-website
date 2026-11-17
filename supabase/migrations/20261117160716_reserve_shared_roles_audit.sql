@@ -1,4 +1,4 @@
--- Veni Publishing production migration: reviewed pinned Reserve source (foundation/preview-2-m1b.sql); additively isolated under reserve, reserve_internal and namespaced RPCs.
+-- Veni Publishing production migration: reviewed pinned Reserve source (foundation/preview-2-m1b.sql); additively isolated under reserve, reserve_internal and namespaced RPCs. Applied as Supabase migration version 20261117160716.
 begin;
 -- AR-027: persistence/integrity only; no operative authorization or public RPC.
 -- Migration runner executes this file transactionally. Existing tenants need an
