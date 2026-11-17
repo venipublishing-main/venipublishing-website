@@ -43,7 +43,7 @@ function checkVerifiedSnapshot(snapshot, request) {
         issues.push('MEMBERSHIP_OR_OWNER_ROLE_UNKNOWN');
       if (m?.id) seen.add(m.id);
     }
-    const count=snapshot.references?.filter(r=>r.table==='reserve.memberships' &&
+    const count=snapshot.references?.filter(r=>r && r.table==='reserve.memberships' &&
       r.column==='user_id' && r.parent==='reserve.users').reduce((s,r)=>s+r.count,0);
     if (!Number.isSafeInteger(count) || count!==snapshot.memberships.length)
       issues.push('MEMBERSHIP_COUNTS_DIVERGE');
@@ -77,7 +77,7 @@ export function planReserveHistoricalDisposition(snapshot, request) {
   const relatedProducts=Object.entries(snapshot?.productInventory??{})
     .filter(([k,n])=>k!=='reserve' && Number.isInteger(n) && n>0).map(([k])=>k).sort();
   const references=Array.isArray(snapshot?.references)?snapshot.references:[];
-  const protectedRefs=references.filter(r=>r.count>0 && !(
+  const protectedRefs=references.filter(r=>r && Number.isSafeInteger(r.count) && r.count>0 && !(
     (r.table==='reserve.users' && r.column==='id' && r.parent==='auth.users') ||
     (r.table==='public.profiles' && r.column==='id' && r.parent==='auth.users')
   ));
@@ -141,7 +141,10 @@ function verifiedReviewer(reviewer, targetId, impactedTenants, relatedProducts, 
  * NO right to modify databases, delete users or de-identify records.
  */
 export function reviewHistoricalPlan(plan, evidence, nowMs) {
-  if (plan?.status!=='HISTORY_REVIEW' || plan.destructiveExecutionAllowed!==false)
+  if (plan?.status!=='HISTORY_REVIEW' || plan.destructiveExecutionAllowed!==false ||
+    !UUID.test(plan.targetId??'') ||
+    !Array.isArray(plan.facts?.impactedTenants) ||
+    !Array.isArray(plan.facts?.relatedProducts))
     return {status:'REJECTED',reason:'NOT_REVIEWABLE'};
   if (!Number.isSafeInteger(nowMs) || nowMs<=0)
     return {status:'REJECTED',reason:'INVALID_REVIEW_TIME'};
