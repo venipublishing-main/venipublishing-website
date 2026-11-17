@@ -12,6 +12,7 @@ assert.equal(process.env.VENI_ATOMIC_RESERVE_REHEARSAL,'yes');
 assert.equal(process.env.VENI_CROSS_CLUSTER_RECOVERY,'yes');
 const phase=process.env.VENI_RECOVERY_PHASE;
 assert.ok(['database','auth'].includes(phase),'One explicit test phase required');
+const privateHistory=process.env.VENI_RECOVERY_PRIVATE_HISTORY_DELTA==='yes';
 
 function localUrl(label,raw,protocols){
   assert.ok(raw,`${label} required`);
@@ -102,15 +103,23 @@ if(phase==='database'){
     WHERE n.nspname IN ('public','reserve','reserve_internal');`;
   assert.deepEqual(json(clone,functionOwners),json(source,functionOwners),
     'Function owner or SECURITY DEFINER drift across servers');
-  const executionRole=`SELECT json_build_object('login',rolcanlogin,
+  const executionRole=(role)=>`SELECT json_build_object('login',rolcanlogin,
     'superuser',rolsuper,'bypass_rls',rolbypassrls,'inherit',rolinherit,
     'create_db',rolcreatedb,'create_role',rolcreaterole,
     'role_config',rolconfig,
     'postgres_member',(SELECT count(*) FROM pg_auth_members m
       WHERE m.roleid=r.oid AND m.member='postgres'::regrole))::text
-    FROM pg_roles r WHERE rolname='reserve_settings_executor';`;
-  assert.deepEqual(json(clone,executionRole),json(source,executionRole),
-    'Restricted settings role missing or weakened on independent cluster');
+    FROM pg_roles r WHERE rolname='${role}';`;
+  for (const role of ['reserve_settings_executor',
+    ...(privateHistory?['reserve_bootstrap_executor','reserve_theme_executor']:[])]) {
+    const roleConfig=json(clone,executionRole(role));
+    assert.deepEqual(roleConfig,json(source,executionRole(role)),
+      'Restricted execution role missing or weakened: '+role);
+    assert.equal(roleConfig.login,false);
+    assert.equal(roleConfig.superuser,false);
+    assert.equal(roleConfig.bypass_rls,false);
+    assert.equal(roleConfig.postgres_member,0);
+  }
   // PostgreSQL role OIDs may differ between servers: compare role *names*,
   // excluding redundant owner self-grants, not raw OIDs.
   const grants=`WITH grants AS (
@@ -138,12 +147,38 @@ if(phase==='database'){
     'memberships',(SELECT count(*) FROM reserve.memberships),
     'audit',(SELECT count(*) FROM reserve.audit_events))::text;`);
   assert.deepEqual(counts,{auth:6,identities:6,profiles:6,arcana:1,
-    reserve_users:5,tenants:2,memberships:4,audit:2});
+    reserve_users:5,tenants:privateHistory?3:2,
+    memberships:privateHistory?5:4,audit:privateHistory?4:2});
+  if(privateHistory){
+    const protectedCount=json(clone,`SELECT json_build_object(
+      'receipts',(SELECT count(*) FROM reserve_internal.tenant_bootstrap_requests),
+      'settings',(SELECT count(*) FROM reserve_internal.tenant_business_settings),
+      'settings_changes',(SELECT count(*) FROM reserve_internal.tenant_business_settings_changes),
+      'themes',(SELECT count(*) FROM reserve_internal.themes),
+      'revisions',(SELECT count(*) FROM reserve_internal.theme_revisions),
+      'revision_events',(SELECT count(*) FROM reserve_internal.theme_revision_events),
+      'published',(SELECT count(*) FROM reserve_internal.published_theme_assignments))::text;`);
+    assert.deepEqual(protectedCount,{receipts:1,settings:2,settings_changes:2,
+      themes:2,revisions:3,revision_events:3,published:0});
+    assert.throws(()=>psql(clone,`UPDATE reserve_internal.theme_revisions
+      SET tokens='{}'::jsonb WHERE revision=1;`),/immutable|cannot|permission denied/i);
+    assert.throws(()=>psql(clone,`DELETE FROM reserve_internal.theme_revision_events;`),
+      /immutable|cannot|permission denied/i);
+    assert.throws(()=>psql(clone,`DELETE FROM reserve_internal.tenant_business_settings_changes;`),
+      /immutable|cannot|permission denied/i);
+  }
   const ownerRls=asUser(clone,fixture.reserve.owner_a.id,
     'SELECT count(*) FROM reserve.tenants; SELECT public.reserve_account_deletion_preflight();');
   assert.deepEqual(ownerRls.split('\n').filter(Boolean),['1','OWNER_TRANSFER_REQUIRED']);
   const rogueRls=asUser(clone,fixture.website.id,'SELECT count(*) FROM reserve.tenants;');
   assert.deepEqual(rogueRls.split('\n').filter(Boolean),['0']);
+  if(privateHistory){
+    const newOwner=asUser(clone,fixture.reserve.unassigned.id,
+      'SELECT count(*) FROM reserve.tenants;');
+    assert.deepEqual(newOwner.split('\n').filter(Boolean),['1'],
+      'Imported bootstrap Owner must keep only their own tenant');
+    console.log('PASS: third-server receipt, settings, immutable revision history, private grants and closed publication retained');
+  }
   console.log(`PASS: ${original.length} tables matched across physically separate disposable PostgreSQL stacks`);
   console.log('PASS: independent database RLS, trigger, owners, grants, tenants, Website/Arcana history, deletion guard');
 }
