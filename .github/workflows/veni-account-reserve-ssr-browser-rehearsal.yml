@@ -1,0 +1,90 @@
+name: Veni Account real Reserve SSR browser rehearsal (disposable)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/integration/browser-handoff/real-reserve-ssr-oauth-browser.mjs'
+      - '.github/workflows/veni-account-reserve-ssr-browser-rehearsal.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-reserve-ssr-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      GITHUB_ACTIONS: 'true'
+      VENI_OAUTH_BROWSER_DISPOSABLE: 'yes'
+      SUPABASE_EXPERIMENTAL_STACK: '0'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - name: Checkout Website account implementation (this draft)
+        uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+
+      - name: Checkout pinned Reserve SSR/OAuth pilot (read-only)
+        uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: 40983b9a6f39360a7234ab8a4bb77b2811dd932f
+          path: reserve
+          persist-credentials: false
+
+      - name: Checkout pinned unactivated Website OAuth consent screen (read-only)
+        uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website
+          ref: bb41ba29314fef53c7d68f5bff644f750b349c25
+          path: website-consent
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.11.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install pinned Reserve dependencies
+        working-directory: reserve
+        run: pnpm install --frozen-lockfile
+        timeout-minutes: 5
+
+      - name: Install pinned Website browser dependencies
+        run: npm ci --prefix website/tests/integration/browser-handoff --no-audit --no-fund
+        timeout-minutes: 5
+
+      - name: Install isolated Chromium
+        run: website/tests/integration/browser-handoff/node_modules/.bin/playwright install --with-deps chromium
+        timeout-minutes: 6
+
+      - name: Verify bounded Reserve-local Docker tools
+        working-directory: reserve
+        run: |
+          test "$(pnpm --version)" = '12.11.2'
+          node tests/database/ci.mjs check
+        timeout-minutes: 3
+
+      - name: Start genuine disposable GoTrue and PostgreSQL
+        working-directory: reserve
+        run: node tests/database/ci.mjs start
+        timeout-minutes: 11
+
+      - name: Rebuild Reserve-local schema without production data
+        working-directory: reserve
+        run: node tests/database/ci.mjs reset
+        timeout-minutes: 5
+
+      - name: Real Website consent to real Reserve SSR browser proof
+        run: node website/tests/integration/browser-handoff/real-reserve-ssr-oauth-browser.mjs
+        timeout-minutes: 7
+
+      - name: Stop only disposable Reserve-local Docker project
+        if: ${{ always() }}
+        working-directory: reserve
+        run: node tests/database/ci.mjs stop
+        timeout-minutes: 3
