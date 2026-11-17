@@ -78,25 +78,19 @@ const containers=command('docker',['ps','--format','{{json .}}']).split('\n')
 // Never display container environment, credentials, secrets or mounted files.
 console.log('Disposable Docker container metadata: '+JSON.stringify(
   containers.map(x=>({name:x.Names,image:x.Image,ports:x.Ports}))));
-// The CLI v3 stack manager may give containers opaque names. Resolve the
-// correct Auth service by its isolated Docker network with the recovery DB,
-// whose ephemeral host port comes from the third stack's own status output.
-const dbCandidates=containers.filter(x=>
-  x.Ports?.includes(`:${native.port}->5432/tcp`));
-assert.equal(dbCandidates.length,1,
-  `Expected one disposable recovery DB container for port ${native.port}; found ${dbCandidates.length}`);
-const dbInspect=JSON.parse(command('docker',['inspect',dbCandidates[0].ID]))[0];
-const dbNetworks=new Set(Object.keys(dbInspect.NetworkSettings.Networks||{}));
-const candidates=containers.filter(x=>/gotrue|auth/i.test(`${x.Image} ${x.Names}`))
-  .filter(x=>{
-    const inspect=JSON.parse(command('docker',['inspect',x.ID]))[0];
-    return Object.keys(inspect.NetworkSettings.Networks||{}).some(n=>dbNetworks.has(n));
-  });
+// CLI v3's DB_URL is a loopback *proxy* port, not the raw published Docker
+// database port. Its tested container naming scheme is service-name based.
+// Identify only the recovery stack's auth service by both name and pinned
+// image, avoiding a guess based on those different port namespaces.
+const candidates=containers.filter(x=>
+  x.Names.startsWith('supabase-integrated-auth-recovery-auth-') &&
+  x.Image==='ghcr.io/supabase/cli/auth:v2.197.0-r0');
 assert.equal(candidates.length,1,
   `Expected exactly one local third-stack GoTrue container; found ${candidates.length}`);
 const nativeAuth=JSON.parse(command('docker',['inspect',candidates[0].ID]))[0];
 const image=nativeAuth.Config.Image;
-assert.match(image,/(?:^|\/)gotrue:v2\./,'Only the pinned local GoTrue image is allowed');
+assert.equal(image,'ghcr.io/supabase/cli/auth:v2.197.0-r0',
+  'Only the identical pinned native local GoTrue image is allowed');
 const env=new Map(nativeAuth.Config.Env.map(item=>{
   const at=item.indexOf('=');
   assert.ok(at>0,'Malformed container environment');
