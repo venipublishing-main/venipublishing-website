@@ -8,6 +8,7 @@ on:
       - 'tests/merge-reserve-bootstrap.test.mjs'
       - 'tests/integration/reserve-shared-bootstrap-catalogue.sql'
       - 'tests/integration/real-auth-shared-reserve-bootstrap.mjs'
+      - 'tests/integration/real-auth-shared-reserve-actor.mjs'
 
 permissions:
   contents: read
@@ -31,6 +32,13 @@ jobs:
           ref: 33709007e19aa2359bb04720d11eac083737597f
           path: reserve
           persist-credentials: false
+      # Read-only, immutable Reserve actor contract candidate (draft PR #27).
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: 39dc8c073402c7ebdba4f08f423e38a9c027665f
+          path: reserve-actor
+          persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: venipublishing-main/venipublishing-website-preview
@@ -50,6 +58,7 @@ jobs:
           supabase migration new --help
           node --test website/tests/merge-reserve-m1.test.mjs website/tests/merge-reserve-m2.test.mjs website/tests/merge-reserve-bootstrap.test.mjs
           node --check website/tests/integration/real-auth-shared-reserve-bootstrap.mjs
+          node --check website/tests/integration/real-auth-shared-reserve-actor.mjs
           node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/veni-m22-preview"
           node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/veni-m22-preview"
           node website/scripts/merge-reserve-bootstrap.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/veni-m22-preview"
@@ -92,6 +101,7 @@ jobs:
             -f website/tests/integration/reserve-shared-bootstrap-catalogue.sql
           psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
           node website/tests/integration/real-auth-shared-reserve-bootstrap.mjs
+          VENI_SHARED_ACTOR_DISPOSABLE=yes node --experimental-strip-types website/tests/integration/real-auth-shared-reserve-actor.mjs
           psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
             -f website/tests/integration/reserve-shared-bootstrap-catalogue.sql
       - name: Shut down disposable stack
