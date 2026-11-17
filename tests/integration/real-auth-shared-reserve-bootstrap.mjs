@@ -8,8 +8,8 @@ assert.equal(process.env.VENI_SHARED_BOOTSTRAP_DISPOSABLE, 'yes',
   'Explicit synthetic-only CI approval required');
 const api = new URL(process.env.API_URL || 'http://invalid');
 const db = new URL(process.env.DB_URL || 'postgres://invalid');
-for (const [url, kind, port] of [[api, 'http:', '54321'], [db, 'postgres:', '54322']]) {
-  assert.equal(url.protocol, kind);
+for (const [url, kinds, port] of [[api, ['http:'], '54321'], [db, ['postgres:', 'postgresql:'], '54322']]) {
+  assert.ok(kinds.includes(url.protocol), 'Expected only a local Auth/SQL transport');
   assert.ok(['127.0.0.1', 'localhost'].includes(url.hostname), 'Loopback only');
   assert.equal(url.port, port, 'Fixed disposable local Auth stack ports');
 }
