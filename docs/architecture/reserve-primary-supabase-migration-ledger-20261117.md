@@ -99,3 +99,18 @@ then restore version `28c632e7-84fe-463a-ba4a-7a558596425d` on `vf-reserve-stg`
 and verify its readiness. Preserve the primary database and new tenant records
 during traffic rollback. The former primary Auth Site URL was
 `https://venipublishing-main.github.io/venipublishing-website-preview/`.
+
+At 18:55 UTC on 17 November, deployment `da124d71-f570-4f1a-9adf-5d4a85e1a0a3`
+sent 100% of staging traffic to version `33673f94-f593-49c2-9aa9-b4f8080f1a94`
+from [Reserve PR #34](https://github.com/venipublishing-main/veni-reserve/pull/34).
+It keeps logout retryable during an Auth outage and clears the tenant setup
+receipt after revocation. The prior shared-account version
+`c7405d4d-f648-47f6-8fe4-a862f1e6cfe6` is the rollback target for this fix.
+
+[Shared integration CI](https://github.com/venipublishing-main/venipublishing-website/actions/runs/44151574979)
+passed with that exact Worker commit, including real callback, tenant writes,
+cross-tenant denial, deletion retention and logout on disposable accounts.
+Hosted health, readiness, anonymous workspace denial, primary OAuth routing,
+Website consent availability and logout cookie clearing passed after rollout.
+At that check, primary Auth had zero completed Reserve consent grants. The
+original project was active pending a completed hosted sign-in.
