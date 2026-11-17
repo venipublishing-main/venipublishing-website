@@ -117,6 +117,19 @@ async function admin(path, method, body) {
   return gotrue(path, { method, body, auth: serviceKey });
 }
 
+async function reserveRequest(path, cookie = '') {
+  const url = new URL(path, RESERVE);
+  assert.equal(url.origin, RESERVE, 'Only the disposable Reserve local origin is allowed');
+  return fetch(url, {
+    redirect: 'manual', signal: AbortSignal.timeout(10000),
+    headers: cookie ? { Cookie: cookie } : {},
+  });
+}
+
+function responseCookie(response, name) {
+  return response.headers.getSetCookie().find(entry => entry.startsWith(`${name}=`))?.split(';')[0] ?? '';
+}
+
 async function startWebsiteServer(fakeKey) {
   websiteServer = createHTTPServer((req, res) => {
     if (!['GET', 'HEAD'].includes(req.method)) {
@@ -276,6 +289,37 @@ try {
   });
   await awaitReserve();
 
+  phase = 'malformed SSR state, callback and next-path rejection';
+  const started = await reserveRequest('/auth/veni/start?next=%2Fapp');
+  check(started.status === 303, 'Real Reserve SSR starts an isolated OAuth transaction');
+  const authorizeURL = new URL(started.headers.get('location'), RESERVE);
+  check(authorizeURL.origin === GOTRUE && authorizeURL.pathname === '/auth/v1/oauth/authorize' &&
+    authorizeURL.searchParams.get('code_challenge_method') === 'S256',
+  'Reserve redirects only to loopback PKCE S256 Auth');
+  const trueState = authorizeURL.searchParams.get('state');
+  const transactionCookie = responseCookie(started, 'vr_local_oauth_transaction');
+  check(!!trueState && !!transactionCookie, 'Unique local state and sealed transaction cookie exist');
+  const fakeCode = randomBytes(32).toString('base64url');
+  const invalidState = randomBytes(32).toString('base64url');
+  const tamperedState = await reserveRequest(
+    `/auth/veni/callback?code=${fakeCode}&state=${invalidState}`, transactionCookie);
+  check(tamperedState.status === 400 &&
+    !responseCookie(tamperedState, 'vr_local_oauth_session'),
+  'Forged OAuth state cannot establish a Reserve session');
+  const duplicateState = await reserveRequest(
+    `/auth/veni/callback?code=${fakeCode}&state=${trueState}&state=${trueState}`, transactionCookie);
+  check(duplicateState.status === 400 &&
+    !responseCookie(duplicateState, 'vr_local_oauth_session'),
+  'Duplicated callback parameters fail before token exchange');
+  const duplicateNext = await reserveRequest('/auth/veni/start?next=%2Fapp&next=%2Fapp');
+  check(duplicateNext.status === 400,
+    'Duplicated Reserve return destination is refused');
+  const externalNext = await reserveRequest('/auth/veni/start?next=https%3A%2F%2Fsteal.example.invalid%2F');
+  check(externalNext.status === 303 &&
+    new URL(externalNext.headers.get('location'), RESERVE).origin === GOTRUE,
+  'Malicious external return destination cannot become an open redirect');
+  console.log('PASS: real Reserve SSR rejects altered state, duplicate parameters and untrusted destinations');
+
   phase = 'real Chromium Website and Reserve redirects';
   const bundle = await readFile(new URL('./node_modules/@supabase/supabase-js/dist/umd/supabase.js', import.meta.url));
   check(bundle.length > 10000, 'Pinned offline browser SDK available');
@@ -283,7 +327,7 @@ try {
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const allowedOrigins = new Set([WEBSITE, RESERVE, GOTRUE, API_FACADE]);
   const blocked = new Set();
-  await context.route('**/*', async route => {
+  const guardRequest = async route => {
     const request = new URL(route.request().url());
     if (allowedOrigins.has(request.origin)) { await route.continue(); return; }
     if (request.origin === 'https://cdn.jsdelivr.net' &&
@@ -294,7 +338,8 @@ try {
     }
     blocked.add(request.origin);
     await route.abort();
-  });
+  };
+  await context.route('**/*', guardRequest);
   const page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', () => pageErrors.push('browser-script-error'));
@@ -348,11 +393,23 @@ try {
     'Already-signed-in account resumes consent without entering a second password');
 
   phase = 'actual Website Allow and Reserve SSR code exchange';
+  const originalTxCookie = (await context.cookies(RESERVE)).find(c => c.name === 'vr_local_oauth_transaction');
+  check(originalTxCookie?.httpOnly && originalTxCookie.sameSite === 'Lax',
+    'Pre-approval state is kept in a sealed HttpOnly transaction cookie');
+  let consumedCallbackURL = '';
+  const rememberCallback = request => {
+    const u = new URL(request.url());
+    if (u.origin === RESERVE && u.pathname === '/auth/veni/callback') consumedCallbackURL = u.href;
+  };
+  page.on('request', rememberCallback);
   await Promise.all([
     page.waitForURL(url => url.origin === RESERVE && url.pathname === '/development/veni-account',
       { timeout: 60000 }),
     page.locator('[data-oauth-approve]').click(),
   ]);
+  page.off('request', rememberCallback);
+  check(!!consumedCallbackURL && new URL(consumedCallbackURL).searchParams.has('code'),
+    'Actual browser navigated through a real one-time OAuth callback');
   const reserveHTML = await page.content();
   check(reserveHTML.includes(syntheticUserId) && reserveHTML.includes('not granted'),
     'Real Reserve SSR verified matching identity but kept business access locked');
@@ -361,12 +418,47 @@ try {
   const connected = (await context.cookies(RESERVE)).find(c => c.name === 'vr_local_oauth_session');
   check(!!connected?.httpOnly && connected.sameSite === 'Lax',
     'Local Reserve SSR established bounded HttpOnly SameSite session cookie');
+  check(connected.expires > Math.floor(Date.now() / 1000) &&
+    connected.expires <= Math.ceil(Date.now() / 1000) + 300,
+  'Local Reserve connected cookie never outlives five-minute pilot limit');
+  check(!(await page.evaluate(() => document.cookie)).includes('vr_local_oauth_session'),
+    'HttpOnly connected cookie is unreadable to browser JavaScript');
   check(new URL(page.url()).search === '' && new URL(page.url()).hash === '',
     'Final browser address has neither OAuth code nor credential fragments');
   await page.goto(`${RESERVE}/app`);
   check(new URL(page.url()).pathname === '/login',
     'Successful OAuth identity does not bypass Reserve tenant/business login');
   console.log('PASS: actual Website Allow → real Reserve SSR PKCE callback, bound UUID and locked tenant gate');
+
+  phase = 'used OAuth code replay and tampered SSR session rejection';
+  const replayURL = new URL(consumedCallbackURL);
+  const replay = await reserveRequest(`${replayURL.pathname}${replayURL.search}`,
+    `vr_local_oauth_transaction=${originalTxCookie.value}`);
+  check(replay.status === 503 && !responseCookie(replay, 'vr_local_oauth_session'),
+    'A redeemed OAuth code fails even with its original valid state and transaction cookie');
+  const [iv, encryptedSession] = connected.value.split('.');
+  check(!!iv && !!encryptedSession, 'Reserve session is an authenticated sealed value');
+  const modified = `${iv}.${encryptedSession[0] === 'A' ? 'B' : 'A'}${encryptedSession.slice(1)}`;
+  const forgedSessionResponse = await reserveRequest('/development/veni-account',
+    `vr_local_oauth_session=${modified}`);
+  check(forgedSessionResponse.status === 200 &&
+    (await forgedSessionResponse.text()).includes('No verified local Veni Account session'),
+  'Tampering with a sealed session is rejected by actual Reserve SSR');
+
+  phase = 'independent browser context cannot inherit first context';
+  const isolatedContext = await browser.newContext({ ignoreHTTPSErrors: true });
+  try {
+    await isolatedContext.route('**/*', guardRequest);
+    const otherPage = await isolatedContext.newPage();
+    await otherPage.goto(`${RESERVE}/development/veni-account`);
+    check((await otherPage.locator('body').innerText()).includes('No verified local Veni Account session'),
+      'A second Chromium browser context has no Reserve connection');
+    await otherPage.goto(`${WEBSITE}/account/sign-in/`);
+    await otherPage.waitForFunction(() => document.documentElement.dataset.accountState === 'signed-out');
+    check(await otherPage.locator('[data-sign-in-form]').isVisible(),
+      'A second Chromium browser context does not inherit Website sign-in');
+  } finally { await isolatedContext.close(); }
+  console.log('PASS: one-time code replay, sealed-cookie forgery and cross-context session isolation');
 
   phase = 'actual Website sign-out and Reserve live session revocation';
   await page.goto(`${WEBSITE}/account/`);
