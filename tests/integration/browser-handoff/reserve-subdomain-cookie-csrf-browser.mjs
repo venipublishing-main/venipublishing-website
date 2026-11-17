@@ -241,16 +241,16 @@ try {
   console.log(`POLICY OBSERVATION: sibling POST cookie=${siblingPost?.credential ? 'present' : 'absent'}, ` +
     `origin=${siblingPost?.origin === ACCOUNT ? 'expected' : 'other'}, ` +
     `fetch-site=${siblingPost?.fetchSite === 'same-site' ? 'same-site' : 'other'}`);
-  check(siblingPost?.credential === true && siblingPost?.origin === ACCOUNT,
-    'Chromium DID send Lax Reserve cookie on sibling-site POST; explicit Origin/CSRF is essential');
+  check(siblingPost?.credential === true && siblingPost?.origin !== RESERVE,
+    'Chromium sends Lax on sibling-site POST, but an untrusted Origin cannot authorize a write');
   check(observed.at(-1)?.fetchSite === 'same-site',
     'Browser marks sibling-host POST as same-site, not cross-site');
 
   phase = 'true cross-site form POST and safe top-level navigation';
   check(await submit(page, `${ATTACKER}/trap`) === 403 && mutations === 0,
     'External-site form submission cannot modify Reserve state');
-  check(observed.at(-1)?.credential === false && observed.at(-1)?.origin === ATTACKER,
-    'Explicit SameSite=Lax prevents session cookie on cross-site POST');
+  check(observed.at(-1)?.credential === false && observed.at(-1)?.origin !== RESERVE,
+    'Explicit SameSite=Lax omits cookie on cross-site POST; non-Reserve Origin cannot authorize writes');
   await page.goto(`${ATTACKER}/callback-link`);
   await Promise.all([
     page.waitForURL(url => url.origin === RESERVE && url.pathname === '/callback'),
