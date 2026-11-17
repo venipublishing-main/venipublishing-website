@@ -79,6 +79,23 @@ public key, namespaced RPCs and central Veni Account. Local integration
 exercised sign-in through the real Worker callback, idempotent tenant creation,
 settings, all private catalogue reads, two-tenant separation and sign-out.
 
-Hosted release requires a registered OAuth client, Website consent allowlist,
-staging Worker secrets and successful sign-in verification. The original
-staging project remains available. See the [transfer record](reserve-to-primary-supabase-transfer-20261117.md).
+On 17 November, Website PR #27 merged the nine matching migration files and
+the registered staging client's consent page. At 18:38 UTC, Cloudflare sent
+100% of staging traffic to Worker version `c7405d4d-f648-47f6-8fe4-a862f1e6cfe6`
+(deployment `3d2f7d0e-7620-4cb6-bf35-7b1b286fffee`). Its deployed bindings
+select the primary Supabase URL and shared account mode. The registered
+client ID, client secret and cookie key are Worker secret bindings.
+
+The primary Auth Site URL is `https://venipublishing.co.za`. Its redirect
+allowlist retains all six GitHub Pages preview entries and includes the live
+Website account and password reset URLs. A staging login returned an S256
+PKCE request to primary Auth, which redirected to the live Website consent
+page. That page returned HTTP 200. An unsigned workspace API request returned
+401. A completed user callback and protected workspace check are separate
+retirement gates. See the [transfer record](reserve-to-primary-supabase-transfer-20261117.md).
+
+For a Worker rollback, confirm the source project is active and healthy first,
+then restore version `28c632e7-84fe-463a-ba4a-7a558596425d` on `vf-reserve-stg`
+and verify its readiness. Preserve the primary database and new tenant records
+during traffic rollback. The former primary Auth Site URL was
+`https://venipublishing-main.github.io/venipublishing-website-preview/`.

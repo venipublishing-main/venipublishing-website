@@ -73,4 +73,37 @@ begin
   end if;
 end $$;
 
+-- Exercise the same hard deletion that Auth performs, using only the three
+-- GoTrue fixtures. The projection continues to protect an identity even when
+-- it has no current membership. Roll back the Website-only positive control.
+begin;
+create function pg_temp.check_retained_account(actor uuid) returns void
+language plpgsql as $$
+declare
+  blocked_by text;
+begin
+  begin
+    delete from auth.users where id = actor;
+    raise exception 'Reserve-linked account deletion was accepted';
+  exception when foreign_key_violation then
+    get stacked diagnostics blocked_by = constraint_name;
+    if blocked_by <> 'users_auth_user_fkey' then
+      raise exception 'Deletion failed for an unexpected reason: %', blocked_by;
+    end if;
+  end;
+  if not exists (select from public.profiles where id = actor) then
+    raise exception 'Website profile lost during rejected deletion';
+  end if;
+end $$;
+
+select pg_temp.check_retained_account(:'owner_a'::uuid);
+savepoint before_projection;
+insert into reserve.users(id) values (:'outsider'::uuid);
+select pg_temp.check_retained_account(:'outsider'::uuid);
+rollback to before_projection;
+delete from auth.users where id = :'outsider'::uuid;
+select 1 / (case when not exists (select from public.profiles where id = :'outsider'::uuid)
+  then 1 else 0 end) as website_only_profile_deleted;
+rollback;
+
 select 'PASS: shared Veni account and Reserve M2 catalogue isolated with immutable history' as outcome;
