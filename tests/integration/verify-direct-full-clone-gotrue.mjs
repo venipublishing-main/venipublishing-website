@@ -38,6 +38,13 @@ const native=localDb('RECOVERY_DB_URL',process.env.RECOVERY_DB_URL,'/postgres');
 const target=localDb('TARGET_DB_URL',process.env.TARGET_DB_URL,'/postgres');
 assert.equal(native.port,clone.port);
 assert.notEqual(target.port,clone.port,'Cloned server must be independent');
+// The original native Auth database uses an Auth-oriented PostgreSQL role
+// search_path. A restored full catalogue accessed via local `postgres` has
+// that role's *different default* search_path, causing GoTrue's unqualified
+// schema_migrations lookup to replay already recorded OAuth migrations.
+// Apply only an Auth-CONNECTION option (no SQL object or role mutation).
+const authClone=new URL(clone);
+authClone.searchParams.set('options','-csearch_path=auth,public');
 
 function command(bin,args,opts={}){
   return execFileSync(bin,args,{encoding:'utf8',timeout:45000,
@@ -62,6 +69,11 @@ assert.deepEqual(cloneShape,sourceShape,
   'The independently restored Auth schema must match original target');
 console.log('PASS: source and full-clone OAuth/migration column catalogues match');
 console.log('Auth schema catalogue (nonsecret column names): '+JSON.stringify(cloneShape));
+assert.equal(psql(authClone,'SELECT current_schema();'),'auth',
+  'The direct GoTrue database session must resolve auth first');
+assert.equal(psql(authClone,"SELECT to_regclass('schema_migrations')::text;"),
+  'schema_migrations','The Auth migration ledger must resolve via search_path');
+console.log('PASS: direct GoTrue connection resolves unqualified migration ledger to auth');
 for(const [label,db] of [['original target',target],['full clone',clone]]){
   const tableNames=cloneShape.map(x=>x.table_name);
   if(tableNames.includes('schema_migrations')){
@@ -119,7 +131,7 @@ console.log('Native local Auth DB variable NAMES: '+JSON.stringify(
 // option, while overriding *all* possible DB URL aliases to this disposable
 // clone. Never print or persist actual secrets beyond this runner's temp file.
 for(const key of ['GOTRUE_DB_DATABASE_URL','DATABASE_URL','DB_DATABASE_URL']){
-  env.set(key,clone.href);
+  env.set(key,authClone.href);
 }
 const port=18982;
 env.set('GOTRUE_API_PORT',String(port));
