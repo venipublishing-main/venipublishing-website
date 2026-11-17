@@ -2,7 +2,9 @@
 
 **DRAFT ONLY · 2026-11-16 · Not an instruction to execute a hosted migration**
 
-The destination is the existing Website project (`droslqfcazwkwvqlbtsq`); the source is the existing Reserve project (`opjgaepryqwmsohtajja`). Both are currently operational. **Do not pause, delete, modify, redirect, or retire Reserve as a result of this document.** Every production action below requires a separately authorised migration window following the gates in this runbook.
+The destination is the existing Website project (`droslqfcazwkwvqlbtsq`); the source is the existing Reserve **staging** project (`opjgaepryqwmsohtajja`). Both are currently operational. **Do not pause, delete, modify, redirect, or retire Reserve as a result of this document.** Every production action below requires a separately authorised migration window following the gates in this runbook.
+
+**2026-11-17 hosted read-only refresh:** [See the redacted account/plan/schema/Auth/Storage/security inventory and Free-plan recovery no-go](reserve-website-hosted-readonly-preflight-20261117.md). Five Reserve and one Website Auth user; no present UUID, email or provider-key collisions; 10 current M1 Reserve app tables, no bookings; both on **Free**, regions and PostgreSQL patch versions differ. No managed paid-plan backup/PITR/paid clone is to be assumed or purchased implicitly.
 
 ## 0. Decisions, ownership, and stop conditions
 
@@ -71,19 +73,20 @@ The destination is the existing Website project (`droslqfcazwkwvqlbtsq`); the so
 
 | Gate | Current evidence | Status |
 | --- | --- | --- |
-| Real hosted schema/Auth inventory | 2026-11-16 read-only audit; 5 source and 1 destination accounts, 10 M1 tables | **Historical snapshot; must refresh** |
+| Real hosted schema/Auth inventory | [2026-11-17 read-only refresh](reserve-website-hosted-readonly-preflight-20261117.md): 5 source and 1 destination accounts, exact table counts, no identity collisions, 10 current M1 Reserve tables, no bookings; both Free, cross-region/patch differences | **Read-only snapshot refreshed; external Auth/config and drift still open** |
 | Synthetic Auth + full M1 domain import | Two independent local GoTrue stacks, preservation/rollback/RLS passed in PR #5 | **Passed in CI only** |
 | PostgreSQL application/Auth/Storage metadata and rows restored to clean database | [CI run #43839340829](https://github.com/venipublishing-main/venipublishing-website/actions/runs/43839340829): 47 datasets, RLS/policies, object owners, grants to other roles, triggers and deletion guard; same disposable cluster; Vault secret data excluded | **Passed locally; hosted proof open** |
 | Independent-cluster synthetic database recovery | [CI run #43848145142](https://github.com/venipublishing-main/venipublishing-website/actions/runs/43848145142): 47 tables, restricted role recreation, application function owners, policies/RLS and deletion protections matched on third PostgreSQL server | **Passed in disposable CI only** |
 | Independent third-stack Auth credential continuity | [CI run #43848145142](https://github.com/venipublishing-main/venipublishing-website/actions/runs/43848145142): six recovered synthetic identities signed in via third native GoTrue with original UUID/password; old Website JWT rejected at its API endpoint | **Passed in disposable CI** |
 | Full independently restored database + direct GoTrue Auth restart | [CI run #44007658384](https://github.com/venipublishing-main/venipublishing-website/actions/runs/44007658384): same pinned Auth image directly on complete cross-server clone; verified Auth-first session search path, six UUIDs/passwords and new JWT sessions; old Website JWT rejected after synthetic signing-secret rotation | **Passed in disposable CI; hosted proof open** |
-| Real hosted/staging backups, Auth provider configuration, privileged ACLs and Vault recovery | No real hosted snapshots, OAuth/MFA/SMTP, Vault/root keys or Storage object bytes were transferred or restored. Local GoTrue proof cannot substitute for those operations. | **Open / no-go** |
-| Storage object bytes and newly deployed bookings | Not covered by M1 fixture; must inventory | **Open** |
+| Real hosted/staging backups, Auth provider configuration, privileged ACLs and Vault recovery | **Both organisations are Free:** scheduled daily backups and paid restore-to-new/PITR cannot be assumed. No hosted export or real-data restore performed; OAuth/SMTP/hook/JWT keys, platform-managed ACLs and Vault/root configuration still require a verified inventory. [Free-plan recovery gate](reserve-website-hosted-readonly-preflight-20261117.md#5-free-plan-recovery--blocking-gate). | **Open / no-go; operator-authorised encrypted exports and independent restore required** |
+| Storage object bytes and newly deployed bookings | 2026-11-17: both current Storage bucket/object counts **0**; Vault secret records **0**; **no hosted booking tables**. Reserve repo contains later tenant-business-settings migration not applied to hosted ledger. External object/secret configuration and future bookings remain unknown. | **Current catalogue checked; future flows/config open** |
 | Hosted data migration and end-user signoff | Not conducted, not authorised | **Open** |
 | Reserve hosted project closure | Explicitly excluded | **Not authorised** |
 
 ### Related draft work
 
+- [2026-11-17 hosted read-only preflight and Free-plan recovery no-go](reserve-website-hosted-readonly-preflight-20261117.md)
 - [Identity strategy and audited gates](reserve-website-auth-cutover-options-20261116.md)
 - Draft PR #2: <https://github.com/venipublishing-main/venipublishing-website/pull/2>
 - Draft PR #4: <https://github.com/venipublishing-main/venipublishing-website/pull/4>
