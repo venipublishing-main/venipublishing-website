@@ -1,0 +1,95 @@
+name: Reserve shared M2 catalogue (genuine local Auth)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-shared-m2-catalogue-candidate.yml'
+      - 'tests/integration/real-auth-reserve-m2-shared.mjs'
+      - 'tests/integration/reserve-shared-m2-catalogue-verify.sql'
+
+permissions:
+  contents: read
+
+jobs:
+  shared-reserve-catalogue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: 7f42278b52a7435ab89a56bc4148a1718ccdfa00 # reviewed Reserve M2 catalogue preview draft
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301 # Arcana pilot fixture
+          path: website-preview
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3 action commit
+        with:
+          version: 3.0.0
+      - name: Verify pinned SQL conversions without hosted credentials
+        run: |
+          set -euo pipefail
+          supabase --version
+          supabase start --help > /dev/null
+          supabase migration new --help > /dev/null
+          node --check website/tests/integration/real-auth-reserve-m2-shared.mjs
+          node --test website/tests/merge-reserve-m1.test.mjs website/tests/merge-reserve-m2.test.mjs
+          node reserve/scripts/preview-shared-account-m2.mjs --verify
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/shared-m2-foundation"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/shared-m2-foundation"
+          node reserve/scripts/preview-shared-account-m2.mjs --preview-dir "$RUNNER_TEMP/shared-m2-catalogue"
+      - name: Start isolated Supabase Auth and PostgREST on loopback
+        working-directory: website/tests/integration/real-auth-stack
+        run: |
+          set -euo pipefail
+          supabase migration new reserve_api_schema_bootstrap
+          shopt -s nullglob
+          generated=(supabase/migrations/*_reserve_api_schema_bootstrap.sql)
+          test "${#generated[@]}" -eq 1
+          cp ../real-auth-schema-bootstrap.sql "${generated[0]}"
+          supabase start -x studio,realtime,storage,imgproxy,edge-runtime
+          supabase status -o env > "$RUNNER_TEMP/local-supabase.env"
+      - name: Apply Website, Arcana and full M2 private catalogue to disposable database
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/local-supabase.env"
+          set +a
+          case "$DB_URL" in
+            postgresql://*@127.0.0.1:54322/postgres|postgres://*@127.0.0.1:54322/postgres) ;;
+            *) echo 'Refusing nonlocal database'; exit 1 ;;
+          esac
+          case "$API_URL" in
+            http://127.0.0.1:54321|http://localhost:54321) ;;
+            *) echo 'Refusing nonlocal API'; exit 1 ;;
+          esac
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f "$RUNNER_TEMP/shared-m2-foundation/preview-1-m1a.sql" \
+            -f "$RUNNER_TEMP/shared-m2-foundation/preview-2-m1b.sql" \
+            -f "$RUNNER_TEMP/shared-m2-foundation/preview-3-m12.sql" \
+            -f "$RUNNER_TEMP/shared-m2-foundation/preview-4-m21.sql" \
+            -f "$RUNNER_TEMP/shared-m2-catalogue/preview-m23-location.sql" \
+            -f "$RUNNER_TEMP/shared-m2-catalogue/preview-m24-service.sql" \
+            -f "$RUNNER_TEMP/shared-m2-catalogue/preview-m25-staff.sql"
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
+          node website/tests/integration/real-auth-reserve-m2-shared.mjs
+      - name: Stop disposable Supabase only
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/real-auth-stack
+        run: supabase stop
