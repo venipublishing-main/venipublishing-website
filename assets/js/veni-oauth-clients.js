@@ -1,3 +1,7 @@
-// Register the public client ID and exact HTTPS callback after hosted approval.
-// The confidential client secret belongs in the Reserve Worker.
-window.VENI_OAUTH_ALLOWED_CLIENTS = Object.freeze([]);
+// Public registration for the primary Veni Account project.
+window.VENI_OAUTH_ALLOWED_CLIENTS = Object.freeze([{
+  clientId: "708f2b73-1c2c-4565-bf94-4325c4af0d31",
+  label: "Veni Reserve staging",
+  redirectUris: ["https://vf-reserve-stg.veni-reserve.workers.dev/auth/veni/callback"],
+  allowedScopes: ["email"]
+}]);
