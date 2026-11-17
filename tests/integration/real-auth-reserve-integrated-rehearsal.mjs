@@ -11,6 +11,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const TENANT_A = 'c1111111-1111-4111-8111-111111111111';
 const TENANT_B = 'c2222222-2222-4222-8222-222222222222';
 const sourceSeed = fileURLToPath(new URL('./real-auth-reserve-source-business-seed.sql', import.meta.url));
+const operatorScript = fileURLToPath(new URL('../../scripts/reserve-test-account-operator.mjs', import.meta.url));
+const operatorReceiptSql = fileURLToPath(new URL('./reserve-test-account-operator-receipts.sql', import.meta.url));
 
 function localUrl(name, raw, protocols) {
   assert.ok(raw, `Missing ${name}`);
@@ -394,6 +396,83 @@ assert.ok((await request(target,'/auth/v1/token?grant_type=password',{
   method:'POST',body:{email:disposable.email,password:disposable.password},
  })).status>=400,'Deleted test account must no longer sign in');
 console.log('PASS: genuine local GoTrue deleted only a synthetic Website-only account after password+Reserve gates');
+
+// Administrator-only cleanup demonstration: Reserve projection with NO history.
+// All other Reserve owner/staff identities are intentionally preserved.
+psql(target.db,readFileSync(operatorReceiptSql,'utf8'));
+const cleanupFixture={
+  email:`reserve-operator-cleanup-${tag}@example.invalid`,
+  password:`ReserveOperator-${tag}-47!`,
+};
+await signup(target,cleanupFixture,
+  {veni_synthetic_fixture:tag,role:'owner'}); // mutable metadata is NOT trusted
+psql(target.db,`UPDATE auth.users
+  SET raw_app_meta_data=coalesce(raw_app_meta_data,'{}'::jsonb) ||
+    jsonb_build_object('veni_synthetic_fixture',${sqlLiteral(tag)})
+  WHERE id=${sqlLiteral(cleanupFixture.id)}::uuid;
+  INSERT INTO reserve.users(id) VALUES (${sqlLiteral(cleanupFixture.id)}::uuid);`);
+assert.equal(targetCount().auth,7);
+assert.equal(scalar(target.db,`SELECT count(*) FROM reserve.users WHERE id=${sqlLiteral(cleanupFixture.id)}::uuid;`),'1');
+
+const operatorEnv={...process.env,CI:'true',
+  VENI_ATOMIC_RESERVE_REHEARSAL:'yes',VENI_SYNTHETIC_CLEANUP_TEST_ONLY:'yes',
+  VENI_SYNTHETIC_OPERATOR_ID:'ci:reserve-rehearsal-runner',
+  TARGET_DB_URL:target.db.href,TARGET_API_URL:target.api.href,
+  TARGET_SERVICE_ROLE_KEY:target.adminKey,
+};
+function runOperator(account,mode,extra=[]) {
+  const args=[operatorScript,mode,'--account-id',account.id,
+    '--email',account.email,'--fixture',tag,...extra];
+  const result=spawnSync(process.execPath,args,{
+    env:operatorEnv,encoding:'utf8',timeout:90000,maxBuffer:1024*1024,
+  });
+  assert.ok([0,2].includes(result.status),
+    `Local-only operator unexpectedly failed: ${(result.stderr||'').slice(-400)}`);
+  const output=(result.stdout||'').trim().split('\n').at(-1);
+  const parsed=JSON.parse(output);
+  return {exit:result.status,...parsed};
+}
+const ownerOperatorPlan=runOperator(actors.owner_a,'--plan');
+assert.equal(ownerOperatorPlan.status,'BLOCKED');
+assert.ok(ownerOperatorPlan.reasons.some(x=>x.startsWith('PROTECTED_REFERENCE:')));
+const unmarkedOperatorPlan=runOperator(actors.unassigned,'--plan');
+assert.equal(unmarkedOperatorPlan.status,'BLOCKED');
+assert.ok(unmarkedOperatorPlan.reasons.includes('TRUSTED_FIXTURE_MARKER_MISSING'));
+const operatorPlan=runOperator(cleanupFixture,'--plan');
+assert.equal(operatorPlan.status,'ELIGIBLE');
+assert.equal(operatorPlan.impact.reserveProjections,1);
+assert.equal(operatorPlan.impact.membershipsOrAuditRemoved,0);
+
+const operatorReason='Disposable unassigned Reserve identity created by this isolated CI run';
+const wrongApproval=runOperator(cleanupFixture,'--execute',[
+  '--approve-hash','0'.repeat(64),
+  '--confirm',`DELETE TEST ACCOUNT ${cleanupFixture.id}`,
+  '--reason',operatorReason,
+]);
+assert.equal(wrongApproval.exit,2);
+assert.equal(wrongApproval.status,'DENIED');
+assert.equal(scalar(target.db,`SELECT count(*) FROM auth.users WHERE id=${sqlLiteral(cleanupFixture.id)}::uuid;`),'1');
+
+const operatorResult=runOperator(cleanupFixture,'--execute',[
+  '--approve-hash',operatorPlan.sha256,
+  '--confirm',`DELETE TEST ACCOUNT ${cleanupFixture.id}`,
+  '--reason',operatorReason,
+]);
+assert.equal(operatorResult.status,'DELETED');
+assert.equal(scalar(target.db,`SELECT count(*) FROM auth.users WHERE id=${sqlLiteral(cleanupFixture.id)}::uuid;`),'0');
+assert.equal(scalar(target.db,`SELECT count(*) FROM reserve.users WHERE id=${sqlLiteral(cleanupFixture.id)}::uuid;`),'0');
+assert.equal(scalar(target.db,`SELECT count(*) FROM public.profiles WHERE id=${sqlLiteral(cleanupFixture.id)}::uuid;`),'0');
+assert.deepEqual(targetCount(),{auth:6,identities:6,profiles:6,readings:1,tenants:2,memberships:4,audit:2});
+assert.equal(businessCount(),22,'Operator cleanup must not change Reserve business/history graph');
+assert.equal(scalar(target.db,`SELECT count(*) FROM venicleanup_ci.receipts;`),'3');
+assert.equal(scalar(target.db,`SELECT count(*) FROM venicleanup_ci.receipts WHERE outcome='SUCCEEDED';`),'1');
+assert.equal(scalar(target.db,`SELECT count(*) FROM venicleanup_ci.receipts WHERE outcome='DENIED';`),'1');
+assert.throws(()=>psql(target.db,`UPDATE venicleanup_ci.receipts SET reason='tampered';`),
+  /Synthetic cleanup evidence is append-only|command failed|psql/);
+assert.throws(()=>psql(target.db,`DELETE FROM venicleanup_ci.receipts;`),
+  /Synthetic cleanup evidence is append-only|command failed|psql/);
+assert.equal(scalar(target.db,'SELECT count(*) FROM venicleanup_ci.receipts;'),'3');
+console.log('PASS: operator dry-run, forged metadata denial, approval digest, unassigned synthetic deletion and immutable receipt audit');
 
 assert.equal(scalar(source.db,'SELECT count(*) FROM auth.users;'),'5');
 assert.equal(scalar(source.db,'SELECT count(*) FROM public.tenants;'),'2');
