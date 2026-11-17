@@ -2,6 +2,8 @@
 
 **2026-11-16 · Draft research and disposable-only experiments · NOT permission to deploy**
 
+**Hosted status refresh (2026-11-17):** [Redacted read-only preflight and Free-plan recovery gap](reserve-website-hosted-readonly-preflight-20261117.md). The existing 5 Reserve / 1 Website Auth account pattern is unchanged; 0 ID/email/provider-key collisions were confirmed again. Both organisations are Free (no paid daily-backup/PITR guarantee); hosted Reserve is staging with M1 only, 0 booking tables, 0 Storage objects and an unapplied later business-settings migration in source control. Regions and PostgreSQL patch levels differ. Nothing hosted was modified; verified real-data backup/restore and management-level Auth/config checks are still hard no-go conditions.
+
 ## Current decision
 
 - The Website Supabase project is the intended **destination** and the canonical Veni Account provider.
