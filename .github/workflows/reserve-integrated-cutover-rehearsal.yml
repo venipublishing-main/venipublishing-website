@@ -11,6 +11,8 @@ on:
       - 'tests/integration/reserve-test-account-operator.test.mjs'
       - 'tests/integration/reserve-test-account-operator-receipts.sql'
       - 'scripts/reserve-test-account-operator.mjs'
+      - 'scripts/reserve-history-retention-gate.mjs'
+      - 'tests/integration/reserve-history-retention-gate.test.mjs'
       - 'tests/integration/account-deletion-guard.test.mjs'
       - 'supabase/functions/_shared/delete-account-guard.mjs'
       - 'supabase/functions/delete-account/index.ts'
@@ -62,6 +64,8 @@ jobs:
           node --check website/tests/integration/real-auth-reserve-integrated-rehearsal.mjs
           node --check website/scripts/reserve-test-account-operator.mjs
           node --test website/tests/integration/reserve-test-account-operator.test.mjs
+          node --check website/scripts/reserve-history-retention-gate.mjs
+          node --test website/tests/integration/reserve-history-retention-gate.test.mjs
           node --check website/assets/js/veni-account.js
           node --test website/tests/integration/reserve-account-deletion-policy.test.mjs website/tests/integration/account-deletion-guard.test.mjs
           node --check website/tests/integration/verify-integrated-restored-clone.mjs
