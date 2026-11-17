@@ -1,7 +1,7 @@
 # Veni Account — actual Website UI / second-origin browser gate
 
 **Date:** 17 November 2026 (SAST)  
-**Status:** DRAFT / disposable evidence; see linked CI run for measured result.  
+**Status:** PASS in genuine disposable GitHub Actions Chromium and GoTrue/PostgREST; DRAFT / local-only evidence.  
 **Scope:** Website Account Layer's Candidate A, a single Website-owned Supabase Auth principal with separate Sphere permissions. No hosted migration approval or SSO transport decision.
 
 ## What is genuinely exercised
@@ -20,11 +20,11 @@ The browser script is `tests/integration/browser-handoff/real-website-signin-bro
 
 | Boundary | Required assertion | Status |
 |---|---|---|
-| Actual Website form → real disposable Auth | UUID, signed-in hub, profile RLS | CI pending |
-| Safe Website post-login routing | External `next=` rejected; no credentials in URL | CI pending |
-| Browser origin separation | Reserve synthetic page has no Website storage | CI pending |
-| Same account, separate business authority | Same UUID; forged Owner and tenant membership denied | CI pending |
-| Real Website navigation logout | Cached Reserve JWT rejected at *tested* session RPC | CI pending |
+| Actual Website form → real disposable Auth | UUID, signed-in hub, profile RLS | **PASS — Chromium** |
+| Safe Website post-login routing | External `next=` rejected; no credentials in URL | **PASS — Chromium** |
+| Browser origin separation | Reserve synthetic page has no Website storage | **PASS — Chromium** |
+| Same account, separate business authority | Same UUID; forged Owner and tenant membership denied | **PASS — real Reserve RLS** |
+| Real Website navigation logout | Cached Reserve JWT rejected at *tested* session RPC | **PASS — real GoTrue/RPC** |
 | Actual Reserve SSR callback and browser UI | Independent production implementation tested | **NOT TESTED** |
 | Seamless one-click Website → Reserve SSO | Secure code/PKCE/handoff agreed and tested | **NOT IMPLEMENTED / RED** |
 | Hosted Supabase, production data, Sports activation | Any mutation made | **NONE — prohibited** |
@@ -39,4 +39,7 @@ The browser script is `tests/integration/browser-handoff/real-website-signin-bro
 
 ## Verification
 
-See this draft PR's GitHub Actions workflow run and job log for the real browser assertions and the full disposable backup/restore rehearsal. Enter the final links and results only after a successful completed run.
+- **PASS:** [Integrated source→Website target, logical backup/restore, actual Website sign-in and two-origin Chromium rehearsal — Actions #44065838206](https://github.com/venipublishing-main/venipublishing-website/actions/runs/44065838206).
+- **PASS:** [Companion shared Supabase local Postgres prototype — Actions #44065838300](https://github.com/venipublishing-main/venipublishing-website/actions/runs/44065838300).
+- Both succeeded on initial draft head `84171eb93f950d590f68f6da120c56623a20a4fa`, 17 November 2026. The integrated job log contains five explicit `PASS` lines and `WEBSITE UI GATE: real sign-in + logout PASS against disposable Auth.`
+- Documentation-only follow-up commits must not be mistaken for new hosted evidence. Real Reserve SSR/handoff and the production release decision remain red.
