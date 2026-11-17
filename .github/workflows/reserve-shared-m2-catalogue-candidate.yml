@@ -8,6 +8,7 @@ on:
       - 'tests/integration/reserve-shared-m2-catalogue-verify.sql'
       - 'scripts/merge-reserve-bootstrap.mjs'
       - 'scripts/merge-reserve-theme.mjs'
+      - 'supabase/migrations/20261117*_reserve_shared_*.sql'
 
 permissions:
   contents: read
@@ -55,6 +56,25 @@ jobs:
           node website/scripts/merge-reserve-bootstrap.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/shared-m2-foundation"
           node website/scripts/merge-reserve-theme.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/shared-m2-foundation"
           node reserve/scripts/preview-shared-account-m2.mjs --preview-dir "$RUNNER_TEMP/shared-m2-catalogue"
+          # Deployment inputs must be byte-for-byte equivalent to the approved
+          # immutable converters after their first provenance comment.
+          for spec in \
+            'foundation/preview-1-m1a.sql 20261117160001_reserve_shared_tenant_core.sql' \
+            'foundation/preview-2-m1b.sql 20261117160002_reserve_shared_roles_audit.sql' \
+            'foundation/preview-3-m12.sql 20261117160003_reserve_shared_rls.sql' \
+            'foundation/preview-4-m21.sql 20261117160004_reserve_shared_business_settings.sql' \
+            'foundation/preview-5-m22-bootstrap.sql 20261117160005_reserve_shared_bootstrap.sql' \
+            'foundation/preview-6-m7-private-theme.sql 20261117160006_reserve_shared_private_theme.sql' \
+            'catalogue/preview-m23-location.sql 20261117160007_reserve_shared_locations.sql' \
+            'catalogue/preview-m24-service.sql 20261117160008_reserve_shared_services.sql' \
+            'catalogue/preview-m25-staff.sql 20261117160009_reserve_shared_staff_eligibility.sql'; do
+            read -r source target <<< "$spec"
+            case "$source" in
+              foundation/*) src="$RUNNER_TEMP/shared-m2-foundation/${source#foundation/}" ;;
+              catalogue/*) src="$RUNNER_TEMP/shared-m2-catalogue/${source#catalogue/}" ;;
+            esac
+            diff -u <(tail -n +2 "$src") <(tail -n +2 "website/supabase/migrations/$target")
+          done
       - name: Start isolated Supabase Auth and PostgREST on loopback
         working-directory: website/tests/integration/real-auth-stack
         run: |
@@ -85,15 +105,15 @@ jobs:
             -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
             -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
             -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
-            -f "$RUNNER_TEMP/shared-m2-foundation/preview-1-m1a.sql" \
-            -f "$RUNNER_TEMP/shared-m2-foundation/preview-2-m1b.sql" \
-            -f "$RUNNER_TEMP/shared-m2-foundation/preview-3-m12.sql" \
-            -f "$RUNNER_TEMP/shared-m2-foundation/preview-4-m21.sql" \
-            -f "$RUNNER_TEMP/shared-m2-foundation/preview-5-m22-bootstrap.sql" \
-            -f "$RUNNER_TEMP/shared-m2-foundation/preview-6-m7-private-theme.sql" \
-            -f "$RUNNER_TEMP/shared-m2-catalogue/preview-m23-location.sql" \
-            -f "$RUNNER_TEMP/shared-m2-catalogue/preview-m24-service.sql" \
-            -f "$RUNNER_TEMP/shared-m2-catalogue/preview-m25-staff.sql"
+            -f website/supabase/migrations/20261117160001_reserve_shared_tenant_core.sql \
+            -f website/supabase/migrations/20261117160002_reserve_shared_roles_audit.sql \
+            -f website/supabase/migrations/20261117160003_reserve_shared_rls.sql \
+            -f website/supabase/migrations/20261117160004_reserve_shared_business_settings.sql \
+            -f website/supabase/migrations/20261117160005_reserve_shared_bootstrap.sql \
+            -f website/supabase/migrations/20261117160006_reserve_shared_private_theme.sql \
+            -f website/supabase/migrations/20261117160007_reserve_shared_locations.sql \
+            -f website/supabase/migrations/20261117160008_reserve_shared_services.sql \
+            -f website/supabase/migrations/20261117160009_reserve_shared_staff_eligibility.sql
           psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
           node website/tests/integration/real-auth-reserve-m2-shared.mjs
           node website/tests/integration/real-auth-shared-reserve-theme.mjs
