@@ -77,7 +77,7 @@
 
 ## Cross-Sphere remainder after Reserve and Performance
 
-1. **Arcana:** dedicated private `veni-arcana` repo currently limits authorized bootstrap to I0–I2a (DEC-012); its current README already requires central Veni Account and entitlements. Later prepare an independent identity, deck-entitlement, reading-history, deletion and WorldFrame/seasonal content contract when I3+ is authorized. No production inference now.
+1. **Arcana:** dedicated private `veni-arcana` repo already requires central Veni Account and entitlements. The more recent Controlled Implementation Handoff reports I0–I3b-1 closed, I3b-2 Golden Dawn research remaining a draft design review, and I4+/production persistence/UI/account integration **not authorized**. The repo README is older and does not supersede this handoff. Later prepare a separate identity, deck-entitlement, reading-history, deletion and WorldFrame/seasonal content contract when those integration milestones are authorized; do not block Performance's preflight on Arcana's ritual-method work.
 2. **Platform:** settle the single identity-transport ADR; finish Website/Reserve OAuth browser proof OR shared Auth migration/recovery; prove token revocation, profile collision, cross-Sphere RLS, account deletion/retention, entitlements and exact restore/extraction.
 3. **Product discovery:** preserve parent GitHub Pages `/kids/`; separate Veni Flow landing from Reserve/Performance product workflows and Arcana from both. Never change DNS, hosted provider or public routes under a docs-only PR.
 
