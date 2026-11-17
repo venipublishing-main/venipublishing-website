@@ -26,7 +26,7 @@ function scalar(sql) {
   }).trim();
 }
 
-async function request(path, { method = 'POST', token, body = {}, profile } = {}) {
+async function request(path, { method = 'POST', token, body, profile } = {}) {
   const headers = { apikey: key };
   if (token) headers.authorization = `Bearer ${token}`;
   else if (key.startsWith('eyJ')) headers.authorization = `Bearer ${key}`;
