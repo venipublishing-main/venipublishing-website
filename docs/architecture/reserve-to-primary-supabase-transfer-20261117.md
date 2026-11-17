@@ -14,12 +14,13 @@ isolation, session revocation, immutable history and optimistic revisions.
 
 The application connects to the primary project via public `reserve_*` RPCs
 and user-scoped tokens. Website consent is served at `/account/authorize/`.
-Register the confidential staging client only after explicit hosted approval,
-then add its public UUID, exact callback and email scope to
-`assets/js/veni-oauth-clients.js`. Keep the secret with the Reserve Worker.
+The primary project has a registered confidential staging client. Its public
+UUID, exact callback and email scope are in `assets/js/veni-oauth-clients.js`.
+The staging Worker holds the client secret.
 The Worker callback is `https://vf-reserve-stg.veni-reserve.workers.dev/auth/veni/callback`.
 
-Verify the released Website consent page, staging Worker readiness, sign-in,
-private workspace and logout before considering retirement of
-`opjgaepryqwmsohtajja`. The source contains staging fixtures and stays active
-through verification.
+The released Website consent page and staging Worker readiness both returned
+HTTP 200. Verify a completed sign-in, private workspace and logout before
+pausing `opjgaepryqwmsohtajja`. The source contains staging fixtures.
+The [hosted ledger](reserve-primary-supabase-migration-ledger-20261117.md)
+records the release and rollback versions.
