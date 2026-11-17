@@ -116,7 +116,7 @@ jobs:
           files=(supabase/migrations/*_reserve_api_schema_bootstrap.sql)
           test "${#files[@]}" -eq 1
           cp ../real-auth-schema-bootstrap.sql "${files[0]}"
-          supabase start --exclude studio,mail,realtime,storage,functions,analytics --eager
+          supabase start --runtime docker --exclude studio,mail,realtime,storage,functions,analytics --eager
           supabase status --env --output-format text > "$RUNNER_TEMP/veni-recovery-third.env"
       - name: Restore snapshot to DIFFERENT disposable PostgreSQL server and reconcile
         run: |
