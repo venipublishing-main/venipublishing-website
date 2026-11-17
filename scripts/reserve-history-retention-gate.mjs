@@ -115,7 +115,9 @@ export function planReserveHistoricalDisposition(snapshot, request) {
       hasKnownRetentionHold:knownHold,
       // A stable UUID linked to immutable audit is still potentially personal
       // data. This is never evidence of complete anonymisation.
-      historicIdentifiersMayRemainLinkable:protectedRefs.length>0 || memberships.length>0,
+      historicIdentifiersMayRemainLinkable:protectedRefs.length>0 || memberships.length>0 ||
+        snapshot?.emailInvitationCount>0 || relatedProducts.length>0 ||
+        snapshot?.productInventory?.reserve>0,
     },
   };
   return {...plan,sha256:digest({request,snapshot,plan})};
