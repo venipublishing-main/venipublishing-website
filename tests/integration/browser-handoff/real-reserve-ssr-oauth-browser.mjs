@@ -466,17 +466,29 @@ try {
   await context.clearCookies({ name: 'vr_local_oauth_session' });
   check(!(await context.cookies(RESERVE)).some(c => c.name === 'vr_local_oauth_session'),
     'Only the browser-held Reserve connected session was removed');
+  console.log('RECOVERY: removed browser-held Reserve cookie');
+  await page.goto(`${WEBSITE}/account/`);
+  await page.waitForFunction(() => ['signed-in', 'signed-out'].includes(
+    document.documentElement.dataset.accountState));
+  check(await page.evaluate(() => document.documentElement.dataset.accountState) === 'signed-in',
+    'Central Website session remains authenticated when Reserve cookie is removed');
+  console.log('RECOVERY: Website sign-in remains independently valid');
   await page.goto(`${RESERVE}/development/veni-account`);
   check((await page.locator('body').innerText()).includes('No verified local Veni Account session'),
     'Real Reserve SSR refuses the removed/expired browser session');
+  const reconnectLink = page.getByRole('link', { name: 'Start local consent test' });
+  check(await reconnectLink.isVisible(), 'Signed-out Reserve SSR still offers a fresh account link');
+  console.log('RECOVERY: Reserve SSR is unverified and offers reconnect');
   await Promise.all([
-    page.waitForURL(url => url.origin === WEBSITE && url.pathname === '/account/authorize/',
-      { timeout: 60000 }),
-    page.getByRole('link', { name: 'Start local consent test' }).click(),
+    page.waitForURL(url => url.origin === WEBSITE &&
+      ['/account/authorize/', '/account/sign-in/'].includes(url.pathname),
+      { timeout: 30000 }),
+    reconnectLink.click(),
   ]);
-  await waitForConsent(page, syntheticUserId, actor.email);
   check(new URL(page.url()).pathname === '/account/authorize/',
-    'Website account remains signed in; Reserve reauthorization needs no second password');
+    'Website account resumes OAuth consent without entering a second password');
+  console.log('RECOVERY: redirected to Website consent using existing Website session');
+  await waitForConsent(page, syntheticUserId, actor.email);
   await Promise.all([
     page.waitForURL(url => url.origin === RESERVE && url.pathname === '/development/veni-account',
       { timeout: 60000 }),
