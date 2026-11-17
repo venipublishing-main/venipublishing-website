@@ -236,7 +236,12 @@ try {
   phase = 'Lax remains vulnerable to same-site form submission without CSRF defenses';
   check(await submit(page, `${ACCOUNT}/trap`) === 403 && mutations === 0,
     'Same-site Website form submission cannot modify Reserve state');
-  check(observed.at(-1)?.credential === true && observed.at(-1)?.origin === ACCOUNT,
+  const siblingPost = observed.at(-1);
+  // Diagnostics are classification-only: never log cookie values or raw request headers.
+  console.log(`POLICY OBSERVATION: sibling POST cookie=${siblingPost?.credential ? 'present' : 'absent'}, ` +
+    `origin=${siblingPost?.origin === ACCOUNT ? 'expected' : 'other'}, ` +
+    `fetch-site=${siblingPost?.fetchSite === 'same-site' ? 'same-site' : 'other'}`);
+  check(siblingPost?.credential === true && siblingPost?.origin === ACCOUNT,
     'Chromium DID send Lax Reserve cookie on sibling-site POST; explicit Origin/CSRF is essential');
   check(observed.at(-1)?.fetchSite === 'same-site',
     'Browser marks sibling-host POST as same-site, not cross-site');
