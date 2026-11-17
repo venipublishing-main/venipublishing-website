@@ -74,6 +74,10 @@ for(const [label,db] of [['original target',target],['full clone',clone]]){
 
 const containers=command('docker',['ps','--format','{{json .}}']).split('\n')
   .filter(Boolean).map(line=>JSON.parse(line));
+// Only container names, image labels and published ports are diagnostic data.
+// Never display container environment, credentials, secrets or mounted files.
+console.log('Disposable Docker container metadata: '+JSON.stringify(
+  containers.map(x=>({name:x.Names,image:x.Image,ports:x.Ports}))));
 // The CLI v3 stack manager may give containers opaque names. Resolve the
 // correct Auth service by its isolated Docker network with the recovery DB,
 // whose ephemeral host port comes from the third stack's own status output.
