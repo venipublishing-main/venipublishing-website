@@ -8,7 +8,8 @@ const unavailable = () => denied(503, 'ACCOUNT_DELETION_PREFLIGHT_UNAVAILABLE',
 // A disposable Website-only identity may be deleted; any Reserve ownership,
 // projection, unknown preflight state or failed password check denies deletion.
 export async function guardedAccountDeletion({
-  enabled, user, requestBody, runPreflight, reauthenticate, deleteAuthenticatedUser,
+  enabled, user, requestBody, checkActiveSession, runPreflight,
+  reauthenticate, deleteAuthenticatedUser,
 }) {
   if (!user?.id) return denied(401, 'AUTHENTICATION_REQUIRED', 'Authentication required.');
 
@@ -24,6 +25,35 @@ export async function guardedAccountDeletion({
     && requestBody.password.length > 0 && requestBody.password.length <= 1024;
   if (!validBody) return denied(400, 'DELETE_CONFIRMATION_REQUIRED',
     'Type DELETE MY ACCOUNT and provide your current password.');
+
+  // A signed access token can remain cryptographically valid after logout or
+  // session revocation. The server must check the JWT's *own* session_id
+  // against current auth.sessions, without accepting an ID from request JSON.
+  // An absent/malformed/unavailable checker MUST NOT permit hard deletion.
+  const requireActiveSession = async () => {
+    if (typeof checkActiveSession !== 'function') {
+      return denied(503, 'ACCOUNT_SESSION_CHECK_UNAVAILABLE',
+        'We could not verify your active session. Your account was not deleted.');
+    }
+    try {
+      const result = await checkActiveSession();
+      if (result?.error || (result?.data !== true && result?.data !== false)) {
+        return denied(503, 'ACCOUNT_SESSION_CHECK_UNAVAILABLE',
+          'We could not verify your active session. Your account was not deleted.');
+      }
+      if (result.data === false) {
+        return denied(401, 'ACCOUNT_SESSION_NOT_ACTIVE',
+          'This session has ended. Please sign in again. Your account was not deleted.');
+      }
+      return null;
+    } catch {
+      return denied(503, 'ACCOUNT_SESSION_CHECK_UNAVAILABLE',
+        'We could not verify your active session. Your account was not deleted.');
+    }
+  };
+
+  const initialSession = await requireActiveSession();
+  if (initialSession) return initialSession;
 
   const preflight = async () => {
     try {
@@ -58,6 +88,11 @@ export async function guardedAccountDeletion({
     return denied(401, 'ACCOUNT_DELETION_REAUTH_FAILED',
       'Current password verification failed. Your account was not deleted.');
   }
+
+  // Recheck the *requesting* session after step-up: a password verification
+  // creates a second session and must not revive a revoked original token.
+  const finalSession = await requireActiveSession();
+  if (finalSession) return finalSession;
 
   const finalCheck = await preflight();
   if (finalCheck) return finalCheck;
