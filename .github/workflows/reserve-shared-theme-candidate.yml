@@ -1,0 +1,108 @@
+name: Reserve private Theme revisions in shared Website Auth (disposable only)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-shared-theme-candidate.yml'
+      - 'scripts/merge-reserve-theme.mjs'
+      - 'tests/merge-reserve-theme.test.mjs'
+      - 'tests/integration/reserve-shared-theme-catalogue.sql'
+      - 'tests/integration/real-auth-shared-reserve-theme.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-theme-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      VENI_SHARED_BOOTSTRAP_DISPOSABLE: 'yes'
+      VENI_SHARED_THEME_DISPOSABLE: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      # PR #22 is immutable at this SHA and contains the exact M1/M2.1/M2.2
+      # ancestors. Every source SQL file is ALSO checked by Git blob hash.
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: 39497d603c7096a74676344ce364a5fd000632d3
+          path: reserve
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301
+          path: website-preview
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13
+        with:
+          version: 3.0.0
+      - name: Verify all immutable SQL sources and private Theme converter
+        run: |
+          set -euo pipefail
+          supabase --version
+          supabase migration new --help
+          node --test website/tests/merge-reserve-m1.test.mjs website/tests/merge-reserve-m2.test.mjs website/tests/merge-reserve-bootstrap.test.mjs website/tests/merge-reserve-theme.test.mjs
+          node --check website/tests/integration/real-auth-shared-reserve-bootstrap.mjs
+          node --check website/tests/integration/real-auth-shared-reserve-theme.mjs
+          node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/veni-m7-preview"
+          node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/veni-m7-preview"
+          node website/scripts/merge-reserve-bootstrap.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/veni-m7-preview"
+          node website/scripts/merge-reserve-theme.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/veni-m7-preview"
+          test "$(find "$RUNNER_TEMP/veni-m7-preview" -maxdepth 1 -name 'preview-*.sql' | wc -l)" -eq 6
+      - name: Start disposable native Auth and PostgREST on loopback
+        working-directory: website/tests/integration/real-auth-stack
+        run: |
+          set -euo pipefail
+          supabase migration new reserve_api_schema_bootstrap
+          shopt -s nullglob
+          files=(supabase/migrations/*_reserve_api_schema_bootstrap.sql)
+          test "${#files[@]}" -eq 1
+          cp ../real-auth-schema-bootstrap.sql "${files[0]}"
+          supabase start -x studio,realtime,storage,imgproxy,edge-runtime
+          supabase status -o env > "$RUNNER_TEMP/veni-theme-local.env"
+      - name: Rebuild Website, Arcana and Reserve through private Theme revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/veni-theme-local.env"
+          set +a
+          case "$DB_URL" in
+            postgresql://*@127.0.0.1:54322/postgres|postgres://*@127.0.0.1:54322/postgres) ;;
+            *) echo 'Refusing non-local SQL'; exit 1 ;;
+          esac
+          case "$API_URL" in
+            http://127.0.0.1:54321|http://localhost:54321) ;;
+            *) echo 'Refusing non-local Auth'; exit 1 ;;
+          esac
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
+            -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
+            -f website-preview/supabase/migrations/20260903072229_arcana_stage3_pilot_foundation.sql \
+            -f "$RUNNER_TEMP/veni-m7-preview/preview-1-m1a.sql" \
+            -f "$RUNNER_TEMP/veni-m7-preview/preview-2-m1b.sql" \
+            -f "$RUNNER_TEMP/veni-m7-preview/preview-3-m12.sql" \
+            -f "$RUNNER_TEMP/veni-m7-preview/preview-4-m21.sql" \
+            -f "$RUNNER_TEMP/veni-m7-preview/preview-5-m22-bootstrap.sql" \
+            -f "$RUNNER_TEMP/veni-m7-preview/preview-6-m7-private-theme.sql" \
+            -f website/tests/integration/reserve-shared-bootstrap-catalogue.sql \
+            -f website/tests/integration/reserve-shared-theme-catalogue.sql
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
+          node website/tests/integration/real-auth-shared-reserve-bootstrap.mjs
+          node website/tests/integration/real-auth-shared-reserve-theme.mjs
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 \
+            -f website/tests/integration/reserve-shared-bootstrap-catalogue.sql \
+            -f website/tests/integration/reserve-shared-theme-catalogue.sql
+      - name: Shut down disposable stack
+        if: always()
+        continue-on-error: true
+        working-directory: website/tests/integration/real-auth-stack
+        run: supabase stop
