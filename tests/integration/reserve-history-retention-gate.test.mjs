@@ -113,9 +113,13 @@ test('unknown marker, incomplete inventory, role mismatch and future FK are safe
 test('invitation-only or another product link cannot trigger unassigned cleanup',()=>{
   const invitation=snapshot();invitation.emailInvitationCount=1;
   invitation.dependencyTenantIds=[tenantB];
-  assert.equal(planReserveHistoricalDisposition(invitation,request).status,'HISTORY_REVIEW');
+  const invitePlan=planReserveHistoricalDisposition(invitation,request);
+  assert.equal(invitePlan.status,'HISTORY_REVIEW');
+  assert.equal(invitePlan.facts.historicIdentifiersMayRemainLinkable,true);
   const arcana=snapshot();arcana.productInventory.arcana=1;
-  assert.equal(planReserveHistoricalDisposition(arcana,request).status,'HISTORY_REVIEW');
+  const arcanaPlan=planReserveHistoricalDisposition(arcana,request);
+  assert.equal(arcanaPlan.status,'HISTORY_REVIEW');
+  assert.equal(arcanaPlan.facts.historicIdentifiersMayRemainLinkable,true);
 });
 
 test('each changed dependency or scope produces a different review fingerprint',()=>{
