@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {readFileSync, writeFileSync, rmSync} from 'node:fs';
-import {join} from 'node:path';
+import {basename,join} from 'node:path';
 
 for(const flag of ['VENI_DUAL_AUTH_DISPOSABLE','VENI_ATOMIC_RESERVE_REHEARSAL',
   'VENI_CROSS_CLUSTER_RECOVERY','VENI_FULL_CLONE_AUTH_DISPOSABLE']){
@@ -93,6 +93,16 @@ const nativeAuth=JSON.parse(command('docker',['inspect',candidates[0].ID]))[0];
 const image=candidates[0].Image;
 assert.equal(image,'ghcr.io/supabase/cli/auth:v2.197.0-r0',
   'Only the identical pinned native local GoTrue image is allowed');
+// CLI v3's slim Auth image can have no default executable; the CLI supplies
+// the command to the container when it creates the native Auth service.
+// Reproduce that *observed* executable/args, with an explicit allowlist.
+const executable=nativeAuth.Path;
+assert.ok(['auth','gotrue','supabase-auth'].includes(basename(executable)),
+  `Unrecognized CLI GoTrue process name: ${basename(executable)}`);
+const executableArgs=nativeAuth.Args||[];
+assert.ok(Array.isArray(executableArgs)&&executableArgs.every(x=>
+  typeof x==='string' && !/[\r\n]/.test(x)), 'Unexpected CLI process arguments');
+console.log(`Native GoTrue executable name: ${basename(executable)}, argc=${executableArgs.length}`);
 const env=new Map(nativeAuth.Config.Env.map(item=>{
   const at=item.indexOf('=');
   assert.ok(at>0,'Malformed container environment');
@@ -146,7 +156,8 @@ async function run(){
   writeFileSync(file,[...env].map(([k,v])=>`${k}=${v}`).join('\n')+'\n',
     {mode:0o600,flag:'wx'});
   const args=['run','--detach','--name',name,'--network','host',
-    '--volumes-from',candidates[0].ID,'--env-file',file,image];
+    '--volumes-from',candidates[0].ID,'--env-file',file,
+    '--entrypoint',executable,image,...executableArgs];
   command('docker',args);
   started=true;
   rmSync(file,{force:true});
@@ -164,6 +175,8 @@ async function run(){
   }
   if(!ready){
     sanitizedLog();
+    console.error('Direct GoTrue container exit code: '+
+      command('docker',['inspect','-f','{{.State.ExitCode}}',name]));
     throw new Error('GATE OPEN: standalone GoTrue failed to start on full restored database');
   }
   console.log('PASS: GoTrue image started directly against full independent snapshot');
