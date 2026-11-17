@@ -89,3 +89,5 @@
 - Independent manual application walkthrough and a labelled disposable fixture/test environment.
 
 **Source references:** [ratified DEC-013](https://docs.google.com/document/d/1a9-onEXHMlqBzGiKFV52TAfMNsS5dC-5I71aZ2CyXHM/edit); [draft merger blueprint](https://docs.google.com/document/d/1SF0VqLmbFcXHVYVRza5CWTTLc9L_4iiMwR98Mq6Fz08/edit); [Website → Reserve draft PR #12](https://github.com/venipublishing-main/venipublishing-website/pull/12); [Reserve draft PR #25](https://github.com/venipublishing-main/veni-reserve/pull/25); prior Performance v0.8 handover and 14–15 Nov read-only audit. Previous Performance counts are handover-reported, not independently verified here.
+
+**Filed for the Sports workstream:** [Veni Performance preflight and checklist Google Doc](https://docs.google.com/document/d/1i0kAXET4VV__8Dr5hM2qBEVAVQ4Jxhpl3M7h6glCUDs/edit) in [Veni Flow → Veni Performance](https://drive.google.com/drive/folders/1T5IlmDAm5_4kl6TlULCiPEaJVAqmGhE6); this draft does not replace the Sports team's own canonical implementation authority.
