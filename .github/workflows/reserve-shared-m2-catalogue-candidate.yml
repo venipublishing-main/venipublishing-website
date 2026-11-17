@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: venipublishing-main/veni-reserve
-          ref: c47c88dcf98926f4699d5c3673557e2a68d8feb2 # shared Reserve Worker and tenant catalogue
+          ref: 37a852411d2635b05f20c287c485aff484a231df # shared Reserve Worker and tenant catalogue
           path: reserve
           persist-credentials: false
       - uses: actions/checkout@v4
