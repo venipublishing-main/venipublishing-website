@@ -88,7 +88,9 @@ const candidates=containers.filter(x=>
 assert.equal(candidates.length,1,
   `Expected exactly one local third-stack GoTrue container; found ${candidates.length}`);
 const nativeAuth=JSON.parse(command('docker',['inspect',candidates[0].ID]))[0];
-const image=nativeAuth.Config.Image;
+// Image IDs and inspect.Config.Image may use an immutable digest while the
+// docker-ps image field retains the same verified pinned tag.
+const image=candidates[0].Image;
 assert.equal(image,'ghcr.io/supabase/cli/auth:v2.197.0-r0',
   'Only the identical pinned native local GoTrue image is allowed');
 const env=new Map(nativeAuth.Config.Env.map(item=>{
