@@ -74,8 +74,20 @@ for(const [label,db] of [['original target',target],['full clone',clone]]){
 
 const containers=command('docker',['ps','--format','{{json .}}']).split('\n')
   .filter(Boolean).map(line=>JSON.parse(line));
-const candidates=containers.filter(x=>x.Names.includes('auth') &&
-  x.Names.includes('veni_integrated_website_recovery_ci'));
+// The CLI v3 stack manager may give containers opaque names. Resolve the
+// correct Auth service by its isolated Docker network with the recovery DB,
+// whose ephemeral host port comes from the third stack's own status output.
+const dbCandidates=containers.filter(x=>
+  x.Ports?.includes(`:${native.port}->5432/tcp`));
+assert.equal(dbCandidates.length,1,
+  `Expected one disposable recovery DB container for port ${native.port}; found ${dbCandidates.length}`);
+const dbInspect=JSON.parse(command('docker',['inspect',dbCandidates[0].ID]))[0];
+const dbNetworks=new Set(Object.keys(dbInspect.NetworkSettings.Networks||{}));
+const candidates=containers.filter(x=>/gotrue|auth/i.test(`${x.Image} ${x.Names}`))
+  .filter(x=>{
+    const inspect=JSON.parse(command('docker',['inspect',x.ID]))[0];
+    return Object.keys(inspect.NetworkSettings.Networks||{}).some(n=>dbNetworks.has(n));
+  });
 assert.equal(candidates.length,1,
   `Expected exactly one local third-stack GoTrue container; found ${candidates.length}`);
 const nativeAuth=JSON.parse(command('docker',['inspect',candidates[0].ID]))[0];
