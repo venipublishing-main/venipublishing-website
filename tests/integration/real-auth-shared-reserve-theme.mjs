@@ -22,7 +22,7 @@ function scalar(sql) {
   return execFileSync('psql',[db.href,'-X','-A','-q','-t','-v','ON_ERROR_STOP=1','-c',sql],
     {encoding:'utf8',timeout:30000,maxBuffer:1024*1024}).trim();
 }
-async function request(path,{method='POST',token,body={},profile}={}) {
+async function request(path,{method='POST',token,body,profile}={}) {
   const headers={apikey:key};
   if(token) headers.authorization=`Bearer ${token}`;
   else if(key.startsWith('eyJ')) headers.authorization=`Bearer ${key}`;
