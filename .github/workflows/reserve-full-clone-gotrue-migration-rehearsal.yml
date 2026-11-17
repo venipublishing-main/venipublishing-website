@@ -1,4 +1,4 @@
-name: Reserve full-clone direct GoTrue startup compatibility (disposable only)
+name: Reserve private-history full-clone GoTrue recovery (disposable only)
 
 on:
   pull_request:
@@ -8,6 +8,9 @@ on:
       - 'tests/integration/integrated-auth-recovery/**'
       - 'tests/integration/verify-independent-supabase-recovery.mjs'
       - 'tests/integration/real-auth-reserve-integrated-rehearsal.mjs'
+      - 'tests/integration/real-auth-reserve-private-history-delta.mjs'
+      - 'scripts/merge-reserve-bootstrap.mjs'
+      - 'scripts/merge-reserve-theme.mjs'
 
 permissions:
   contents: read
@@ -20,6 +23,8 @@ jobs:
       VENI_DUAL_AUTH_DISPOSABLE: 'yes'
       VENI_ATOMIC_RESERVE_REHEARSAL: 'yes'
       VENI_CROSS_CLUSTER_RECOVERY: 'yes'
+      VENI_PRIVATE_HISTORY_DELTA_DISPOSABLE: 'yes'
+      VENI_RECOVERY_PRIVATE_HISTORY_DELTA: 'yes'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: venipublishing-main/veni-reserve
-          ref: ecb6b23fc4ee8ec15fbb6074a3e347f87f3d0555
+          ref: 39497d603c7096a74676344ce364a5fd000632d3
           path: reserve
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -47,12 +52,15 @@ jobs:
         run: |
           set -euo pipefail
           node --check website/tests/integration/real-auth-reserve-integrated-rehearsal.mjs
+          node --check website/tests/integration/real-auth-reserve-private-history-delta.mjs
           node --check website/tests/integration/verify-independent-supabase-recovery.mjs
           node --check website/tests/integration/verify-direct-full-clone-gotrue.mjs
           supabase --version
           supabase stack --help
           node website/scripts/merge-reserve-m1.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/integrated-recovery-preview"
           node website/scripts/merge-reserve-m2.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/integrated-recovery-preview"
+          node website/scripts/merge-reserve-bootstrap.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/integrated-recovery-preview"
+          node website/scripts/merge-reserve-theme.mjs --reserve-root reserve --out-dir "$RUNNER_TEMP/integrated-recovery-preview"
       - name: Start independent disposable Reserve SOURCE
         working-directory: website/tests/integration/integrated-auth-source
         run: |
@@ -70,7 +78,7 @@ jobs:
           cp ../real-auth-schema-bootstrap.sql "${files[0]}"
           supabase start --exclude studio,mail,realtime,storage,functions,analytics --eager
           supabase status --env --output-format text > "$RUNNER_TEMP/veni-recovery-target.env"
-      - name: Populate two genuine GoTrue stacks and transfer synthetic Auth and M1 domain
+      - name: Populate real GoTrue stacks, transfer M1 Auth, then atomically migrate private history
         run: |
           set -euo pipefail
           umask 077
@@ -94,7 +102,10 @@ jobs:
           psql "$SOURCE_DB_URL" -X -v ON_ERROR_STOP=1 \
             -f reserve/supabase/migrations/20261030154642_m1_1a_tenant_user_membership_persistence.sql \
             -f reserve/supabase/migrations/20261030174937_m1_1b_role_permission_invitation_audit_foundation.sql \
-            -f reserve/supabase/migrations/20261031031256_m1_2_rls_cross_tenant_security.sql
+            -f reserve/supabase/migrations/20261031031256_m1_2_rls_cross_tenant_security.sql \
+            -f reserve/supabase/migrations/20261103160923_tenant_business_settings.sql \
+            -f reserve/supabase/migrations/20261113111616_tenant_bootstrap.sql \
+            -f reserve/supabase/migrations/20261114110626_theme_revisions_private_drafts.sql
           psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 \
             -f website/supabase/migrations/20260903_001_veni_account_foundation.sql \
             -f website/supabase/migrations/20260903071048_revoke_handle_new_user_rpc_access.sql \
@@ -103,11 +114,14 @@ jobs:
             -f "$RUNNER_TEMP/integrated-recovery-preview/preview-2-m1b.sql" \
             -f "$RUNNER_TEMP/integrated-recovery-preview/preview-3-m12.sql" \
             -f "$RUNNER_TEMP/integrated-recovery-preview/preview-4-m21.sql" \
+            -f "$RUNNER_TEMP/integrated-recovery-preview/preview-5-m22-bootstrap.sql" \
+            -f "$RUNNER_TEMP/integrated-recovery-preview/preview-6-m7-private-theme.sql" \
             -f website/tests/integration/reserve-account-deletion-preflight-prototype.sql
           psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
           export VENI_EXPORT_SYNTHETIC_RECOVERY_ACCOUNTS=yes
           export VENI_SYNTHETIC_RECOVERY_ACCOUNTS_FILE="$RUNNER_TEMP/veni-recovery-accounts.json"
           node website/tests/integration/real-auth-reserve-integrated-rehearsal.mjs
+          node website/tests/integration/real-auth-reserve-private-history-delta.mjs
       - name: Start THIRD independent local Supabase stack for recovery
         working-directory: website/tests/integration/integrated-auth-recovery
         run: |
@@ -145,21 +159,24 @@ jobs:
             pg_dump --format=custom --no-owner \
               --exclude-table-data=vault.secrets --dbname="$TARGET_DB_URL" > "$BACKUP_FILE"
           test -s "$BACKUP_FILE"
-          # pg_dump excludes cluster-global roles. The application has one
-          # tightly constrained NOLOGIN/NOINHERIT execution role referenced by
-          # restored policies and SECURITY DEFINER functions. Provision only
-          # that reviewed role on the THIRD disposable server, never platform
-          # roles or hosted credentials.
+          # pg_dump excludes cluster-global roles. Provision only the THREE
+          # audited, NOLOGIN/NOINHERIT Reserve executor roles required by
+          # policies and private SECURITY DEFINER functions on this disposable
+          # third server; never platform roles or hosted credentials.
           psql "$RECOVERY_DB_URL" -X -v ON_ERROR_STOP=1 -c \
-            'CREATE ROLE reserve_settings_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;'
+            'CREATE ROLE reserve_settings_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
+             CREATE ROLE reserve_bootstrap_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
+             CREATE ROLE reserve_theme_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;'
           psql "$RECOVERY_DB_URL" -X -v ON_ERROR_STOP=1 -c \
             "ALTER ROLE reserve_settings_executor SET search_path = '';"
           psql "$TARGET_DB_URL" -X -A -t -v ON_ERROR_STOP=1 -c "
-            SELECT format('ALTER FUNCTION %I.%I(%s) OWNER TO reserve_settings_executor;',
-              n.nspname,p.proname,pg_get_function_identity_arguments(p.oid))
+            SELECT format('ALTER FUNCTION %I.%I(%s) OWNER TO %I;',
+              n.nspname,p.proname,pg_get_function_identity_arguments(p.oid),
+              pg_get_userbyid(p.proowner))
             FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
             WHERE n.nspname IN ('reserve','reserve_internal','public')
-              AND pg_get_userbyid(p.proowner)='reserve_settings_executor'
+              AND pg_get_userbyid(p.proowner) IN (
+                'reserve_settings_executor','reserve_bootstrap_executor','reserve_theme_executor')
             ORDER BY n.nspname,p.proname;" \
             > "$RUNNER_TEMP/veni-recovery-function-owners.sql"
           test -s "$RUNNER_TEMP/veni-recovery-function-owners.sql"
@@ -183,21 +200,25 @@ jobs:
               --use-list=/venibackup/veni-recovery-filtered.toc \
               --dbname="$RECOVERY_CLONE_DB_URL" /venibackup/veni-independent-recovery.dump
           # --no-owner deliberately avoids replaying platform ownership; apply
-          # only the reviewed app role's function ownership from source. The
+          # only the three reviewed app roles' function ownership from source. The
           # local `postgres` login is not SUPERUSER, so PostgreSQL requires
           # a temporary SET ROLE membership and CREATE on the private schema,
           # matching the exact original M2 migration's restricted ownership
           # transfer. Revoke BOTH immediately after; the verifier checks drift.
-          psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
-            -c 'GRANT reserve_settings_executor TO postgres WITH SET TRUE;'
-          psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
-            -c 'GRANT CREATE ON SCHEMA reserve_internal TO reserve_settings_executor;'
+          for executor in reserve_settings_executor reserve_bootstrap_executor reserve_theme_executor; do
+            psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
+              -c "GRANT $executor TO postgres WITH SET TRUE;"
+            psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
+              -c "GRANT CREATE ON SCHEMA reserve_internal TO $executor;"
+          done
           psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
             -f "$RUNNER_TEMP/veni-recovery-function-owners.sql"
-          psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
-            -c 'REVOKE CREATE ON SCHEMA reserve_internal FROM reserve_settings_executor;'
-          psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
-            -c 'REVOKE reserve_settings_executor FROM postgres;'
+          for executor in reserve_settings_executor reserve_bootstrap_executor reserve_theme_executor; do
+            psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
+              -c "REVOKE CREATE ON SCHEMA reserve_internal FROM $executor;"
+            psql "$RECOVERY_CLONE_DB_URL" -X -v ON_ERROR_STOP=1 \
+              -c "REVOKE $executor FROM postgres;"
+          done
           node website/tests/integration/verify-independent-supabase-recovery.mjs
       - name: Verify recovered credentials through THIRD native GoTrue stack
         run: |
