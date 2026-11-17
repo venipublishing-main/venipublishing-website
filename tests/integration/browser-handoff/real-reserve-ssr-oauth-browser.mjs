@@ -460,6 +460,75 @@ try {
   } finally { await isolatedContext.close(); }
   console.log('PASS: one-time code replay, sealed-cookie forgery and cross-context session isolation');
 
+  phase = 'Reserve browser-session loss and fresh Website reauthorization';
+  // Model expiry/eviction at the browser boundary without waiting five minutes.
+  // This does not claim the Reserve server clock or refresh path was exercised.
+  await context.clearCookies({ name: 'vr_local_oauth_session' });
+  check(!(await context.cookies(RESERVE)).some(c => c.name === 'vr_local_oauth_session'),
+    'Only the browser-held Reserve connected session was removed');
+  console.log('RECOVERY: removed browser-held Reserve cookie');
+  await page.goto(`${WEBSITE}/account/`);
+  await page.waitForFunction(() => ['signed-in', 'signed-out'].includes(
+    document.documentElement.dataset.accountState));
+  check(await page.evaluate(() => document.documentElement.dataset.accountState) === 'signed-in',
+    'Central Website session remains authenticated when Reserve cookie is removed');
+  console.log('RECOVERY: Website sign-in remains independently valid');
+  await page.goto(`${RESERVE}/development/veni-account`);
+  check((await page.locator('body').innerText()).includes('No verified local Veni Account session'),
+    'Real Reserve SSR refuses the removed/expired browser session');
+  const reconnectLink = page.getByRole('link', { name: 'Start local consent test' });
+  check(await reconnectLink.isVisible(), 'Signed-out Reserve SSR still offers a fresh account link');
+  console.log('RECOVERY: Reserve SSR is unverified and offers reconnect');
+  let freshCallbackSeen = false;
+  const observeRecoveryCallback = request => {
+    const u = new URL(request.url());
+    if (u.origin === RESERVE && u.pathname === '/auth/veni/callback' &&
+        u.searchParams.has('code') && u.searchParams.has('state')) {
+      freshCallbackSeen = true;
+    }
+  };
+  page.on('request', observeRecoveryCallback);
+  await reconnectLink.click();
+  let recoveryPath = '';
+  for (let attempt = 0; attempt < 150 && !recoveryPath; attempt++) {
+    const u = new URL(page.url());
+    if (u.origin === RESERVE && u.pathname === '/development/veni-account') {
+      recoveryPath = 'consent-reused';
+    } else if (u.origin === WEBSITE && u.pathname === '/account/authorize/' &&
+        await page.locator('[data-oauth-consent]').isVisible()) {
+      recoveryPath = 'consent-required';
+    } else if (u.origin === WEBSITE && u.pathname === '/account/sign-in/' &&
+        await page.locator('[data-sign-in-form]').isVisible()) {
+      recoveryPath = 'password-required';
+    } else {
+      await delay(100);
+    }
+  }
+  check(recoveryPath === 'consent-required' || recoveryPath === 'consent-reused',
+    'Existing Website account resumes OAuth without requiring a second password');
+  if (recoveryPath === 'consent-required') {
+    await waitForConsent(page, syntheticUserId, actor.email);
+    await Promise.all([
+      page.waitForURL(url => url.origin === RESERVE && url.pathname === '/development/veni-account',
+        { timeout: 60000 }),
+      page.locator('[data-oauth-approve]').click(),
+    ]);
+  }
+  page.off('request', observeRecoveryCallback);
+  check(freshCallbackSeen, 'Reauthorization travels through a fresh one-time Reserve OAuth callback');
+  console.log('RECOVERY: Website reauthorization completed with ' + recoveryPath);
+  const reconnectedBody = await page.content();
+  check(reconnectedBody.includes(syntheticUserId) && reconnectedBody.includes('not granted'),
+    'Fresh OAuth approval restores the same verified UUID but no Reserve business authority');
+  const reconnectedCookie = (await context.cookies(RESERVE)).find(c => c.name === 'vr_local_oauth_session');
+  check(reconnectedCookie?.httpOnly && reconnectedCookie.sameSite === 'Lax' &&
+    reconnectedCookie.value !== connected.value,
+    'Reauthorization issues a distinct sealed HttpOnly Reserve session');
+  await page.goto(`${RESERVE}/app`);
+  check(new URL(page.url()).pathname === '/login',
+    'Reauthenticated identity still cannot enter a Reserve business without membership');
+  console.log('PASS: Reserve browser-session loss is fail-closed; fresh Website consent recovers identity only');
+
   phase = 'actual Website sign-out and Reserve live session revocation';
   await page.goto(`${WEBSITE}/account/`);
   await page.waitForFunction(() => document.documentElement.dataset.accountState === 'signed-in');
