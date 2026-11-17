@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { guardedAccountDeletion } from '../../supabase/functions/_shared/delete-account-guard.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TENANT_A = 'c1111111-1111-4111-8111-111111111111';
@@ -31,8 +32,9 @@ const target = {
   api: localUrl('TARGET_API_URL', process.env.TARGET_API_URL, ['http:']),
   db: localUrl('TARGET_DB_URL', process.env.TARGET_DB_URL, ['postgres:', 'postgresql:']),
   key: process.env.TARGET_ANON_KEY,
+  adminKey: process.env.TARGET_SERVICE_ROLE_KEY, // disposable local Supabase stack only
 };
-assert.ok(source.key && target.key);
+assert.ok(source.key && target.key && target.adminKey, 'Both local Auth keys and local admin key required');
 assert.notEqual(source.api.origin, target.api.origin);
 assert.notEqual(source.db.port, target.db.port);
 assert.equal(source.db.pathname, '/postgres');
@@ -312,6 +314,86 @@ assert.ok((await request(target,'/rest/v1/rpc/reserve_account_deletion_preflight
   method:'POST',body:{},
 })).status>=400,'Anonymous deletion preflight must be denied');
 console.log('PASS: deletion preflight protects owners/history through genuine migrated Website sessions');
+
+// Execute the SAME checked deletion orchestrator as the drafted Edge Function,
+// against genuine disposable local GoTrue/PostgREST. No hosted API can pass
+// the loopback/port guards above, and the admin key comes from local CLI.
+async function attemptLocalDelete(account, token, password) {
+  const calls={preflight:0, password:0, admin:0};
+  const outcome=await guardedAccountDeletion({
+    enabled:'enabled',
+    user:{id:account.id,email:account.email},
+    requestBody:{confirmation:'DELETE MY ACCOUNT',password},
+    runPreflight:async()=>{
+      calls.preflight++;
+      const response=await request(target,'/rest/v1/rpc/reserve_account_deletion_preflight',{
+        method:'POST',token,body:{},
+      });
+      return {data:response.data,error:response.status>=200 && response.status<300 ? null : Error('local RPC unavailable')};
+    },
+    reauthenticate:async(email,currentPassword)=>{
+      calls.password++;
+      const response=await request(target,'/auth/v1/token?grant_type=password',{
+        method:'POST',body:{email,password:currentPassword},
+      });
+      return {userId:response.data?.user?.id,hasSession:Boolean(response.data?.access_token),
+        error:response.status>=200 && response.status<300 ? null : Error('local password rejected')};
+    },
+    deleteAuthenticatedUser:async(verifiedId)=>{
+      calls.admin++;
+      assert.equal(verifiedId,account.id,'Admin may only delete JWT-authenticated own UUID');
+      const response=await fetch(new URL(`/auth/v1/admin/users/${verifiedId}`,target.api),{
+        method:'DELETE',
+        headers:{apikey:target.adminKey,authorization:`Bearer ${target.adminKey}`},
+        signal:AbortSignal.timeout(25000),
+      });
+      return {error:response.ok ? null : Error(`local GoTrue admin returned ${response.status}`)};
+    },
+  });
+  return {outcome,calls};
+}
+
+// Protected Reserve accounts never reach admin deletion, even with passwords.
+for(const kind of ['owner_a','owner_b','staff','unassigned']) {
+  const blocked=await attemptLocalDelete(actors[kind],tokens[kind],actors[kind].password);
+  assert.equal(blocked.outcome.status,409,`${kind} should be blocked`);
+  assert.deepEqual(blocked.calls,{preflight:1,password:0,admin:0});
+}
+
+// One newly created disposable Website-only identity can be deleted. The
+// pre-existing Website account, Arcana reading and all Reserve data survive.
+const disposable={email:`to-delete-${tag}@example.invalid`,password:`Delete-CI-${tag}-42!`};
+await signup(target,disposable);
+assert.equal(targetCount().auth,7);
+assert.equal(targetCount().profiles,7);
+const disposableToken=await signin(target,disposable);
+assert.equal(await deletionState(disposableToken),'RESERVE_CLEAR');
+const deniedPassword=await attemptLocalDelete(disposable,disposableToken,'incorrect-password');
+assert.equal(deniedPassword.outcome.status,401);
+assert.deepEqual(deniedPassword.calls,{preflight:1,password:1,admin:0});
+assert.equal(scalar(target.db,`SELECT count(*) FROM auth.users WHERE id=${sqlLiteral(disposable.id)};`),'1');
+
+// An ordinary user JWT cannot invoke the Auth admin endpoint directly.
+const deniedAdmin=await request(target,`/auth/v1/admin/users/${disposable.id}`,{
+  method:'DELETE',token:disposableToken,
+});
+assert.ok(deniedAdmin.status===401 || deniedAdmin.status===403,
+  'Supabase admin deletion must reject ordinary caller JWTs');
+assert.equal(scalar(target.db,`SELECT count(*) FROM auth.users WHERE id=${sqlLiteral(disposable.id)};`),'1');
+
+const deleted=await attemptLocalDelete(disposable,disposableToken,disposable.password);
+assert.deepEqual(deleted.outcome,{status:200,body:{deleted:true}});
+assert.deepEqual(deleted.calls,{preflight:2,password:1,admin:1});
+assert.equal(scalar(target.db,`SELECT count(*) FROM auth.users WHERE id=${sqlLiteral(disposable.id)};`),'0');
+assert.equal(scalar(target.db,`SELECT count(*) FROM auth.identities WHERE user_id=${sqlLiteral(disposable.id)};`),'0');
+assert.equal(scalar(target.db,`SELECT count(*) FROM public.profiles WHERE id=${sqlLiteral(disposable.id)};`),'0');
+assert.deepEqual(targetCount(),{auth:6,identities:6,profiles:6,readings:1,tenants:2,memberships:4,audit:2});
+assert.equal(businessCount(),22,'Deletion must preserve every Reserve business record');
+assert.equal((await idsVisible(websiteToken,'arcana_readings')).length,1);
+assert.ok((await request(target,'/auth/v1/token?grant_type=password',{
+  method:'POST',body:{email:disposable.email,password:disposable.password},
+ })).status>=400,'Deleted test account must no longer sign in');
+console.log('PASS: genuine local GoTrue deleted only a synthetic Website-only account after password+Reserve gates');
 
 assert.equal(scalar(source.db,'SELECT count(*) FROM auth.users;'),'5');
 assert.equal(scalar(source.db,'SELECT count(*) FROM public.tenants;'),'2');

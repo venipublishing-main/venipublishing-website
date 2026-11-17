@@ -272,16 +272,21 @@
   });
 
   const deleteInput = document.querySelector("[data-delete-confirmation]");
+  const deletePasswordInput = document.querySelector("[data-delete-password]");
   const deleteButton = document.querySelector("[data-delete-account]");
   const syncDeleteButton = () => {
     if (!deleteButton) return;
-    deleteButton.disabled = String(deleteInput?.value || "").trim() !== "DELETE MY ACCOUNT";
+    deleteButton.disabled = String(deleteInput?.value || "").trim() !== "DELETE MY ACCOUNT"
+      || !String(deletePasswordInput?.value || "").length;
   };
   deleteInput?.addEventListener("input", syncDeleteButton);
+  deletePasswordInput?.addEventListener("input", syncDeleteButton);
   syncDeleteButton();
 
   deleteButton?.addEventListener("click", async () => {
     if (String(deleteInput?.value || "").trim() !== "DELETE MY ACCOUNT") return;
+    const password = String(deletePasswordInput?.value || "");
+    if (!password) return;
 
     const confirmed = window.confirm(
       "Delete this Veni Account permanently? This removes the account and current private account records. This cannot be undone."
@@ -289,13 +294,28 @@
     if (!confirmed) return;
 
     deleteButton.disabled = true;
-    setStatus("Deleting your Veni Account…");
+    setStatus("Checking ownership, records and current password…");
 
-    const { data, error } = await client.functions.invoke("delete-account", { body: {} });
-    if (error || !data?.deleted) {
-      deleteButton.disabled = false;
+    let data, error;
+    try {
+      ({ data, error } = await client.functions.invoke("delete-account", {
+        body: { confirmation: "DELETE MY ACCOUNT", password }
+      }));
+    } catch (caught) {
+      error = caught;
+    }
+    // Never keep the password in the danger-zone form after an attempt.
+    if (deletePasswordInput) deletePasswordInput.value = "";
+    let responseData = data;
+    if (error?.context?.json && !responseData) {
+      try { responseData = await error.context.json(); } catch {}
+    }
+    if (error || !responseData?.deleted) {
       syncDeleteButton();
-      return setStatus(data?.error || error?.message || "We could not delete your account.", "error");
+      return setStatus(
+        responseData?.error || error?.message || "We could not delete your account.",
+        "error"
+      );
     }
 
     await client.auth.signOut({ scope: "local" }).catch(() => {});

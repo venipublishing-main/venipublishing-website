@@ -81,6 +81,7 @@ jobs:
           TARGET_API_URL="$API_URL"
           TARGET_DB_URL="$DB_URL"
           TARGET_ANON_KEY="$ANON_KEY"
+          TARGET_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" # disposable CLI only
           set +a
           for url in "$SOURCE_DB_URL" "$TARGET_DB_URL"; do
             case "$url" in
