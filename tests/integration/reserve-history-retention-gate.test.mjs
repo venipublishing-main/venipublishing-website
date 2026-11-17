@@ -101,6 +101,7 @@ test('unknown marker, incomplete inventory, role mismatch and future FK are safe
   const f=linked();f.dependencyTenantIds=[];candidates.push(f);
   const g=linked();delete g.holds.legal;candidates.push(g);
   const h=linked();h.memberships={untrusted:'malformed'};candidates.push(h);
+  const i=linked();i.references.push(null);candidates.push(i);
   for(const s of candidates){
     const p=planReserveHistoricalDisposition(s,request);
     assert.equal(p.status,'INVENTORY_BLOCKED',JSON.stringify(p.issues));
@@ -136,6 +137,8 @@ test('two separate recent human AAL2 reviewers produce only a review packet',()=
   assert.equal(result.destructiveExecutionAllowed,false);
   assert.equal(result.executionCapability,null);
   assert.deepEqual(result.reviewerIds,[requesterId,approverId]);
+  assert.equal(reviewHistoricalPlan({status:'HISTORY_REVIEW',
+    destructiveExecutionAllowed:false},evidence(plan),nowMs).status,'REJECTED');
 });
 
 test('mocked review rejects wrong target, hash, confirmation and decision',()=>{
