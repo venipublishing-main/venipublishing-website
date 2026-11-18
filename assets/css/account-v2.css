@@ -32,6 +32,8 @@
 .account-tool-card.arcana span{color:#75531f}
 .account-settings-stack{display:grid;gap:1rem}
 .account-settings-stack[hidden],#connected-applications button[hidden]{display:none}
+#reserve-disconnection{box-sizing:border-box;width:min(32rem,calc(100% - 2rem));margin:auto;padding:1.5rem;border:1px solid #665a4d;border-radius:.55rem;background:#fffdf8;color:#17201d}
+#reserve-disconnection::backdrop{background:rgba(23,32,29,.60)}
 .account-settings-card{background:#fffdf8;border:1px solid rgba(23,32,29,.16);border-radius:.55rem;padding:1.35rem}
 .account-settings-card h2{margin-bottom:.4rem}.account-settings-card .eyebrow{margin-bottom:.35rem}
 .account-danger{border-color:rgba(145,54,42,.35);background:#fff8f5}
