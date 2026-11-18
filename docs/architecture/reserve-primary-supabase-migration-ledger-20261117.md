@@ -202,3 +202,20 @@ Ian authorized one hosted reconnection and disconnection on his existing account
 | 6. Final integrity | PASS | At 12:22:23, primary had zero active Reserve grants, zero Reserve sessions, zero other active grants, four first-party session rows, one Auth identity, zero Reserve tenants, zero Reserve users and all nine Reserve migrations. Primary and the original project both reported ACTIVE_HEALTHY. The test changed only the authorized OAuth grant and its associated sessions. No hosted schema or Auth configuration changes occurred. |
 
 **Handover decision.** Infrastructure and database migration are complete, canonical account integration is deployed, and hosted sign-in is accepted. Hosted cancellation and explicit provider grant revocation are now verified. Overall hosted acceptance and migration sign-off remain incomplete because the still-valid bearer check is outstanding. Reserve was left disconnected. Any additional hosted reconnection requires fresh authorization. Legacy project retirement remains a separate decision.
+
+## 18 November 2026 — final hosted bearer test
+
+**PASS.** Ian authorized one additional reconnection and performed the final disconnection click. The test targeted the same `GET /api/workspace/session` endpoint twice from one temporary, memory-only browser context. This endpoint accepts a sealed HttpOnly cookie. On each request, the deployed Worker unwraps the original Reserve OAuth access JWT and sends it as a bearer to `GET /auth/v1/user`. The Worker has no refresh or token replacement path in this check. The harness never exported the cookie or JWT.
+
+| UTC | Observed result |
+| --- | --- |
+| 12:33:34 | Preflight found zero Reserve grants and sessions, zero unrelated grants, zero businesses and Reserve users, and one Auth identity. Pages and Worker versions matched the preceding acceptance run. |
+| 12:35:39.767–12:35:40.854 | Fresh protected workspace request returned HTTP 200 with the authorized empty workspace. The provider accepted the bearer at 12:35:40.227 with HTTP 200. |
+| 12:35:53 | Ian selected **Disconnect on all devices** once. The gateway recorded exactly one grant DELETE, HTTP 204, at 12:35:53.648. Primary recorded revocation at 12:35:53.740819. |
+| 12:35:53.906–12:35:54.168 | The harness immediately repeated the same workspace request and received HTTP 401, `unauthenticated`. On the provider clock, the Worker's bearer request to the same Auth endpoint returned HTTP 403 at 12:35:53.896, after grant revocation. |
+| 12:35:54 | Reloaded Website settings remained authenticated and showed Reserve disconnected. The temporary browser context was then discarded. |
+| 12:36:25 | Primary had zero active Reserve grants and zero Reserve session rows. Unrelated active grants, businesses and Reserve users all remained zero. The single Auth identity and all nine Reserve migrations remained present. Both projects reported ACTIVE_HEALTHY. |
+
+For the two provider bearer requests corresponding to the probes, an aggregate comparison of session, issue time, expiry and signature prefix returned one distinct marker tuple, zero incomplete markers, one accepted request and one denied request. Only counts and expiry were retrieved. The JWT expiry was **13:35:37 UTC**, approximately 59 minutes 43 seconds after rejection. The private browser's five-minute cookie was also still usable: the Worker actually reached Auth with the bearer on the second request. No second reconnection, hosted schema change, Auth configuration change or project retirement occurred.
+
+**Final decision.** The outstanding hosted check passed. Veni Reserve is eligible for formal migration sign-off and normal development. The earlier incident's cause remains undetermined. [Reserve migration completion report](reserve-migration-completion-20261118.md)
