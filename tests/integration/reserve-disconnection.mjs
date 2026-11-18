@@ -104,7 +104,7 @@ try {
     const headers = { Cookie: cookie(finish, 'vr_session') };
     assert.equal((await app('/app', { headers })).status, 200);
     const workspace = await payload(await app('/api/workspace/session', { headers }), 'workspace');
-    assert.deepEqual(workspace.user, { id: websiteUser });
+    assert.ok(workspace.user.id === websiteUser, 'workspace belongs to the isolated identity');
     assert.deepEqual(workspace.tenants, []);
     return headers;
   }
@@ -139,19 +139,24 @@ try {
   assert.equal((await app('/api/workspace/session', { headers: b })).status, 200);
 
   browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  const page = await context.newPage();
   const pinnedCdn = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0';
   const assets = resolve(website, 'assets');
   let deletes = 0;
-  await page.route('**/*', async route => {
+  const successfulDelete = Promise.withResolvers();
+  const releaseDelete = Promise.withResolvers();
+  async function serveLocalWebsite(route) {
     const url = new URL(route.request().url());
     if (url.href === pinnedCdn) return route.fulfill({ path: resolve(sdk, 'dist/umd/supabase.js') });
     if (url.origin === site && /^\/(auth|rest)\/v1\//.test(url.pathname)) {
       if (route.request().method() === 'DELETE') {
         assert.equal(url.pathname, '/auth/v1/user/oauth/grants');
-        assert.equal(url.searchParams.get('client_id'), primary.client_id);
+        assert.ok(url.searchParams.get('client_id') === primary.client_id, 'only the registered Reserve client');
         if (++deletes === 1) return route.fulfill({ status: 503, contentType: 'application/json',
           headers: { 'access-control-allow-origin': site }, body: '{"message":"Simulated provider outage"}' });
+        successfulDelete.resolve();
+        await releaseDelete.promise;
       }
       // Keep the virtual Website origin same-origin in Chromium. Every provider
       // response except the injected first failure comes from the real stack.
@@ -171,35 +176,103 @@ try {
     if (path.startsWith(assets + sep) && existsSync(path)) return route.fulfill({ path,
       ...(path.endsWith('.mjs') ? { contentType: 'text/javascript' } : {}) });
     return route.fulfill({ status: 404, body: '' });
-  });
+  }
+  await context.route('**/*', serveLocalWebsite);
   await page.goto(site + '/account/settings/#connected-applications');
   assert.equal(await page.getByRole('heading', { name: 'Connected applications' }).isVisible(), false);
-  const set = await page.evaluate(async session => {
-    const { error } = await window.veniAccount.client.auth.setSession(session);
-    return error && { name: error.name, status: error.status, code: error.code, message: error.message };
-  },
-    { access_token: identity.access_token, refresh_token: identity.refresh_token });
-  assert.deepEqual(set, null, 'Website session initialized');
+  async function signInWebsite(tab) {
+    const signedIn = await tab.evaluate(async session => {
+      const { error } = await window.veniAccount.client.auth.setSession(session);
+      return !error;
+    }, { access_token: identity.access_token, refresh_token: identity.refresh_token });
+    assert.ok(signedIn, 'Website session initialized');
+  }
+  await signInWebsite(page);
   const disconnect = page.getByRole('button', { name: 'Disconnect Reserve staging', exact: true });
   const status = page.locator('[data-connection-status]');
-  const message = 'Disconnect Reserve staging on all devices?\n\nThis will end your Reserve staging access across all browsers and devices. You will remain signed in to your Veni Account. Connecting Reserve again will require fresh consent.';
-  async function decision(accept) {
-    const dialogSeen = page.waitForEvent('dialog').then(async dialog => {
-      assert.equal(dialog.type(), 'confirm');
-      assert.equal(dialog.message(), message);
-      if (accept) await dialog.accept(); else await dialog.dismiss();
-    });
-    await Promise.all([disconnect.click(), dialogSeen]);
+  function controls(tab) {
+    const dialog = tab.getByRole('dialog', { name: 'Disconnect Reserve staging on all devices?', exact: true });
+    return {
+      dialog, open: tab.getByRole('button', { name: 'Disconnect Reserve staging', exact: true }),
+      cancel: dialog.getByRole('button', { name: 'Cancel', exact: true }),
+      confirm: dialog.getByRole('button', { name: 'Disconnect on all devices', exact: true }),
+    };
   }
-  await decision(false);
+  const ui = controls(page);
+  const focused = locator => locator.evaluate(el => el === document.activeElement);
+  async function checkDevices() {
+    for (const headers of [a, b]) {
+      const session = await payload(await app('/api/workspace/session', { headers }), 'existing Reserve session');
+      assert.ok(session.user.id === websiteUser);
+      assert.deepEqual(session.tenants, []);
+    }
+  }
+  for (const dismissal of ['Cancel', 'Escape', 'backdrop', 'Enter', 'Cancel']) {
+    await ui.open.click();
+    await ui.dialog.waitFor();
+    assert.ok(await ui.dialog.getByText('This will disconnect Reserve staging across your browsers and devices. Your Veni Account will remain signed in. Reconnecting Reserve will require fresh consent.', { exact: true }).isVisible());
+    assert.ok(await focused(ui.cancel), 'Cancel has initial focus');
+    assert.equal(deletes, 0, 'opening never revokes');
+    if (dismissal === 'Cancel') await ui.cancel.click();
+    else if (dismissal === 'backdrop') await page.mouse.click(2, 2);
+    else await page.keyboard.press(dismissal);
+    await ui.dialog.waitFor({ state: 'hidden' });
+    assert.ok(await focused(ui.open), 'focus returned to opener');
+    await checkDevices();
+    assert.equal(deletes, 0, dismissal + ' never revokes');
+  }
+  await ui.open.dblclick();
+  await page.reload();
+  await ui.open.waitFor();
+  assert.equal(await ui.dialog.isVisible(), false);
+  // Model a handoff with a confirmation left open in another browser profile.
+  const otherProfile = await browser.newContext();
+  await otherProfile.route('**/*', serveLocalWebsite);
+  const abandoned = await otherProfile.newPage();
+  await abandoned.goto(site + '/account/settings/');
+  await signInWebsite(abandoned);
+  const abandonedUI = controls(abandoned);
+  await abandonedUI.open.click();
+  await abandonedUI.dialog.waitFor();
+  await ui.open.click();
+  await ui.cancel.click();
+  await otherProfile.close();
+  await checkDevices();
+  assert.equal(deletes, 0, 'an interrupted confirmation never commits in either profile');
+  const peer = await context.newPage();
+  await peer.goto(site + '/account/settings/');
+  const peerUI = controls(peer);
+  await Promise.all([ui.open.click(), peerUI.open.click()]);
+  await Promise.all([ui.cancel.click(), peerUI.cancel.click()]);
+  await checkDevices();
   assert.equal(deletes, 0);
-  await decision(true);
+  // A normal keyboard activation of the explicit final button also works.
+  await ui.open.click();
+  await ui.cancel.press('Tab');
+  assert.ok(await focused(ui.confirm));
+  await ui.confirm.press('Enter');
   await page.getByRole('button', { name: 'Retry', exact: true }).waitFor();
   assert.match(await status.textContent(), /Could not confirm disconnection/);
-  for (const headers of [a, b]) assert.equal((await app('/api/workspace/session', { headers })).status, 200);
+  assert.equal(deletes, 1, 'one failed attempt');
+  await checkDevices();
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
-  await decision(true);
+  await ui.open.waitFor();
+  assert.equal(deletes, 1, 'Retry only checks the grant');
+  await Promise.all([ui.open.click(), peerUI.open.click()]);
+  assert.equal(deletes, 1);
+  try {
+    await ui.confirm.dblclick();
+    await Promise.race([successfulDelete.promise, delay(5000).then(() => { throw new Error('expected explicit DELETE'); })]);
+    assert.ok(await page.locator('[data-confirm-disconnection]').isDisabled());
+    assert.match(await status.innerText(), /Disconnecting/);
+    // This tab explicitly confirms too, while the first request is in flight.
+    await peerUI.confirm.click();
+    assert.equal(deletes, 2, 'only one in-flight DELETE across both tabs');
+  } finally {
+    releaseDelete.resolve();
+  }
   await page.getByText('Reserve staging disconnected on all devices.', { exact: true }).waitFor();
+  await peer.getByText('Reserve staging is disconnected.', { exact: true }).waitFor();
   assert.equal(deletes, 2);
   assert.equal(await disconnect.isVisible(), false);
   const remaining = await page.evaluate(async () => {
@@ -208,7 +281,8 @@ try {
     if (error) throw new Error('grant listing failed');
     return { user: (await auth.getUser()).data.user?.id, grants: data.map(grant => grant.client.id) };
   });
-  assert.deepEqual(remaining, { user: websiteUser, grants: [other.client_id] });
+  assert.ok(remaining.user === websiteUser, 'Website account remains signed in');
+  assert.ok(remaining.grants.length === 1 && remaining.grants[0] === other.client_id, 'control grant remains');
   for (const headers of [a, b]) {
     assert.equal((await app('/api/workspace/session', { headers })).status, 401);
     assert.equal((await app('/app', { headers })).status, 302);
@@ -218,13 +292,13 @@ try {
   const activeControl = await auth('/rest/v1/rpc/reserve_current_reserve_user', {
     method: 'POST', headers: { ...json, ...bearer(control) }, body: '{}',
   });
-  assert.equal(await payload(activeControl, 'control app session lookup'), websiteUser);
+  assert.ok((await payload(activeControl, 'control app session lookup')) === websiteUser);
   await page.reload();
   await page.getByText('Reserve staging is disconnected.', { exact: true }).waitFor();
   assert.equal(await disconnect.isVisible(), false);
   const restart = await app('/auth/veni/start');
   await consent(restart.headers.get('location'), primary, true, false);
-  console.log('PASS GoTrue v2.198.0, OAuth logout 403, confirmed Website revocation and retry, two Worker cookies and bearer denied, Website and control app retained, fresh consent and empty workspace.');
+  console.log('PASS GoTrue v2.198.0: open, Cancel, Escape, backdrop, keyboard, reload and concurrent dismissals sent zero DELETEs. One simulated failed DELETE and one successful DELETE. Both Worker sessions and a bearer denied; Website and control app retained; fresh consent and empty workspace.');
 } finally {
   await browser?.close();
   server?.kill();
