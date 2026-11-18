@@ -152,3 +152,5 @@ Read-only checks found all nine Reserve migrations applied and both Supabase pro
 ## Hosted disconnection acceptance
 
 Ian explicitly approved the hosted test with his existing Veni Account. At the start of the test, primary had one Auth identity, one active Reserve staging grant, zero unrelated active OAuth grants, zero Reserve tenants and zero Reserve users. Website settings showed Reserve staging as connected. The first browser profile reached the protected workspace and displayed “No authorized businesses yet.”
+
+The independent Chrome profile also displayed “No authorized businesses yet.” The in-app confirmation opened, but its dialog handle closed before cancellation could be verified. Chrome Website settings still showed “Reserve staging is connected,” and a read-only provider check confirmed one active Reserve grant. Cancellation and subsequent revocation remain unverified at this checkpoint.
