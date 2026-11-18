@@ -1,0 +1,56 @@
+name: Reserve staging disconnection
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/reserve-disconnection.yml'
+      - 'account/settings/**'
+      - 'assets/js/connected-applications.mjs'
+      - 'assets/js/veni-account.js'
+      - 'assets/js/veni-oauth-clients.js'
+      - 'tests/integration/reserve-disconnection.mjs'
+      - 'tests/integration/real-auth-stack/supabase/config.toml'
+
+permissions:
+  contents: read
+
+jobs:
+  disconnection:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: 3218fbaa0a89097be9205225ef57423ac5d497fa
+          path: reserve
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: reserve/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install isolated Worker and browser tooling
+        run: |
+          pnpm --dir reserve install --frozen-lockfile
+          npm install --prefix "$RUNNER_TEMP/browser" playwright@1.61.1 @supabase/supabase-js@2.119.0
+          "$RUNNER_TEMP/browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Start the hosted Auth version on loopback
+        run: |
+          stack="$RUNNER_TEMP/disconnect"
+          mkdir -p "$stack/supabase/.temp"
+          sed 's/veni_consolidation_1117/veni_disconnect_1118/' website/tests/integration/real-auth-stack/supabase/config.toml > "$stack/supabase/config.toml"
+          cp -r website/supabase/migrations "$stack/supabase/"
+          echo v2.198.0 > "$stack/supabase/.temp/gotrue-version"
+          reserve/node_modules/.bin/supabase start --workdir "$stack" -x studio,realtime,storage-api,imgproxy,edge-runtime,postgres-meta,mailpit > /dev/null
+      - name: Verify disconnection and the empty workspace
+        working-directory: website
+        run: |
+          node tests/integration/reserve-disconnection.mjs "$RUNNER_TEMP/disconnect" ../reserve "$RUNNER_TEMP/browser"
+          counts=$(docker exec supabase_db_veni_disconnect_1118 psql -U postgres -Atc 'select (select count(*) from reserve.tenants), (select count(*) from reserve.users), (select count(*) from auth.users)')
+          test "$counts" = '0|0|0'
