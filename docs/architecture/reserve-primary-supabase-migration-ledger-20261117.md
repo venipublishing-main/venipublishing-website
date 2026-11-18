@@ -114,3 +114,23 @@ Hosted health, readiness, anonymous workspace denial, primary OAuth routing,
 Website consent availability and logout cookie clearing passed after rollout.
 At that check, primary Auth had zero completed Reserve consent grants. The
 original project was active pending a completed hosted sign-in.
+
+## Hosted browser verification on 18 November
+
+The existing Website account authorized the registered Reserve staging client
+and reached the protected Business setup page. It displayed “No authorized
+businesses yet.” The browser identity matched the UUID in the primary Auth
+session and Website profile. Primary still had one identity, zero Reserve
+tenants, six Arcana cards and all nine Reserve migration versions.
+
+The authenticated logout button displayed a retry error. Worker traces showed a
+same-origin request and HTTP 503. Hosted GoTrue v2.198.0 recorded HTTP 403 with
+error code `no_authorization` for `POST /auth/v1/logout?scope=local` because
+that endpoint rejects OAuth client access tokens. The provider session remained
+afterward. The 17 November cookie-clearing probe used an unsigned request and
+did not test provider revocation. The local CLI stack used GoTrue v2.197.0.
+
+Retirement remains blocked on successful authenticated logout. Repeat the
+browser test against the hosted Auth version after the fix. The old project
+was still active with five synthetic identities, two tenants, four memberships,
+zero pending invitations and zero storage objects.
