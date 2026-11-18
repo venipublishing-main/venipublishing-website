@@ -160,3 +160,26 @@ The independent Chrome profile also displayed “No authorized businesses yet.�
 The protected session endpoint also denied the original Chrome profile. Both browsers' authenticated Website settings showed “Reserve staging is disconnected.” Primary still had one Auth identity, four non-OAuth session rows, zero unrelated active grants, zero Reserve tenants and zero Reserve users. No other grant existed to exercise on this account. The probes used the browsers' existing state without initiating a new login. The five-minute Reserve cookie lifetime limits what the probes establish independently about token replay.
 
 The team did not establish the required sequence of cancellation preserving both devices followed by an observed confirmation revoking them. Fresh hosted consent was not exercised after the failure. The Reserve grant was left revoked. No database migration, Auth configuration change or project retirement was performed. Hosted disconnection acceptance remains open.
+
+## 18 November follow-up investigation
+
+**Confirmed observations.** The incident's primary Auth logs show the following sequence from the Website using supabase-js 2.119.0. Times are UTC.
+
+| Time | Provider event | Result |
+| --- | --- | --- |
+| 07:25:05.458 | `GET /auth/v1/user` | 200 |
+| 07:25:06.249 | `DELETE /auth/v1/user/oauth/grants` | 204 |
+| 07:25:06 | Auth audit recorded token revocation | Recorded |
+| 07:25:22.929 | `GET /auth/v1/user/oauth/grants` | 200 |
+
+The successful DELETE establishes that an actual grant revocation occurred. A read-only fetch of the live settings HTML and JavaScript matched Website merge `c290cad`. In that source, the settings page imports the module once. Its sole application call to `revokeGrant` follows a positive `window.confirm()` result and a successful identity check. Inspection found one opener listener. The Auth listener updates the active identity and schedules a grant read. The visibility and retry listeners also read grants. The separate account sign-out handler is attached to a different control.
+
+**Hypotheses and root cause.** The original isolated Playwright test dismissed or accepted the particular native dialog it had just observed in a single Website page. In the hosted run, an in-app dialog handle disappeared before dismissal could be verified, and the handoff continued in Chrome. A different outstanding interaction could account for the DELETE, but the available evidence does not identify one. A suppressed native dialog normally returns false, which would exit this handler. The lost handle therefore cannot establish approval, cancellation or causation. No duplicate registration or Auth-driven revocation was found in the inspected source. **The originating interaction and root cause are undetermined.** [Browser confirmation behavior](https://developer.mozilla.org/en-US/docs/Web/API/Window/confirm)
+
+**Corrective implementation and security review.** Website PR #34 moves confirmation into an accessible page dialog. Cancel receives initial focus. Opening, dismissing and closing the dialog have no call path to revocation. Only the final **Disconnect on all devices** button in an open dialog starts the request. Its handler disables repeat input, verifies the signed-in identity and rereads the configured Reserve client's grant. Same-profile tabs use Web Locks when available to serialize confirmed requests. A failed response offers a grant read on Retry and requires a new explicit confirmation. No Reserve Worker change is part of the correction. [Website PR #34, commit `f67a5b0`](https://github.com/venipublishing-main/venipublishing-website/pull/34)
+
+**Isolated results.** On GoTrue v2.198.0, the browser test observed zero grant DELETEs during opening, repeated cancellation, Escape, backdrop and keyboard dismissal, page reload, concurrent dismissals and an interrupted handoff between two browser profiles. Both existing Reserve sessions continued to read their empty workspaces. An explicit disconnection received a simulated 503. Retrying read the grant, and the subsequent explicit confirmations produced exactly one successful provider DELETE across the competing tabs. Previously issued Reserve cookies and a bearer lost protected access. The Website session and control application's grant and session remained active. Reserve required fresh consent. After cleanup the isolated database had zero businesses, Reserve users and Auth identities. Thirty Website Node tests and three Python tests also passed locally.
+
+Both checks on the correction commit passed on GitHub. The Linux runner repeated the browser exercise on a fresh loopback stack and verified all three cleanup counts. [Disconnection CI](https://github.com/venipublishing-main/venipublishing-website/actions/runs/44261418070) · [Discovery CI](https://github.com/venipublishing-main/venipublishing-website/actions/runs/44261417900)
+
+**Hosted status.** Hosted acceptance remains incomplete. Ian's grant was left disconnected. This investigation made no hosted Auth, database or project changes. The correction awaits review and deployment authorization. A later hosted acceptance run requires fresh approval and settings pages loaded from the corrected release.
