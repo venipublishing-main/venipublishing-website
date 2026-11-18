@@ -185,3 +185,13 @@ Both checks on the correction commit passed on GitHub. The Linux runner repeated
 **Hosted status.** Hosted acceptance remains incomplete. Ian's grant was left disconnected. This investigation made no hosted Auth, database or project changes. The correction awaits review and deployment authorization. A later hosted acceptance run requires fresh approval and settings pages loaded from the corrected release.
 
 **Subsequent deployment record, 18 November.** GitHub records that [Website PR #34](https://github.com/venipublishing-main/venipublishing-website/pull/34) merged at 08:44:49 UTC as `aac1382f41dfb1e7bb8bf11d5ee1f74a6700d274`. The [GitHub Pages deployment](https://github.com/venipublishing-main/venipublishing-website/actions/runs/44269643050) succeeded for that merge commit. This follow-up checked repository and deployment records only. The original incident's root cause remains undetermined. Hosted acceptance remains incomplete and a new hosted test requires fresh approval.
+
+## Corrected release: controlled hosted acceptance, 18 November 2026
+
+Ian authorized one hosted reconnection and disconnection on his existing account. Times below are UTC. The earlier interrupted run remains recorded above.
+
+| Stage | Result | Hosted evidence |
+| --- | --- | --- |
+| 1. Read-only preflight | PASS | At 12:10:42, primary had one Auth identity, four first-party session rows, zero active Reserve grants, zero Reserve sessions, zero other active grants, zero Reserve tenants and zero Reserve users. All nine Reserve migrations were recorded. Both projects reported ACTIVE_HEALTHY. Both Website profiles were signed in. The served settings HTML and confirmation module matched the reviewed source. Pages deployed `aac1382f41dfb1e7bb8bf11d5ee1f74a6700d274`. Worker `dc92dc55-0641-4e88-bb1b-e2cb70a1252c` had 100% of staging traffic. |
+| 2. Reconnect in two profiles | PASS | The normal Veni consent screen identified Reserve staging. Allow connection was selected once. The in-app browser and Chrome displayed “No authorized businesses yet.” Their protected workspaces showed the same identity. At 12:12:53, one active Reserve grant and two Reserve sessions were present. Both sessions matched the canonical Website profile. |
+| 3. Cancel | PASS | The panel opened with Cancel focused. Selecting Cancel closed it and left the connected status visible. Both profiles reloaded their empty workspaces and then read the protected session endpoint successfully. The Website remained signed in. The gateway grant-endpoint log window 12:12:45–12:13:45 contained two GET 200 responses and zero DELETEs. At 12:13:45 the active grant and both sessions were still present. |
