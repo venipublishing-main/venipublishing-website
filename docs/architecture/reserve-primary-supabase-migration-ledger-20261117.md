@@ -148,3 +148,7 @@ Read-only checks found all nine Reserve migrations applied and both Supabase pro
 **Rollback.** The preceding Website release is `dc903deebe025f9c953b5b5413b3595a72313663`. Cloudflare still lists the previous staging Worker version `33673f94-f593-49c2-9aa9-b4f8080f1a94`. For a coordinated rollback, restore that Worker before reverting the Website release so the staging link continues to have a destination.
 
 **Acceptance.** Infrastructure and database migration are complete. Canonical account integration is deployed, and hosted sign-in was accepted earlier on 18 November. Hosted all-device disconnection awaits Ian's explicit approval and a successful two-browser test with his existing account. Legacy project retirement remains a separate decision.
+
+## Hosted disconnection acceptance
+
+Ian explicitly approved the hosted test with his existing Veni Account. At the start of the test, primary had one Auth identity, one active Reserve staging grant, zero unrelated active OAuth grants, zero Reserve tenants and zero Reserve users. Website settings showed Reserve staging as connected. The first browser profile reached the protected workspace and displayed “No authorized businesses yet.”
