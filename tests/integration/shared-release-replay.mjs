@@ -2,13 +2,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { copyFileSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const [fixture, reserveCheckout] = process.argv.slice(2).map(p => resolve(p));
+const [fixture, reserveCheckout, reviewedLedger] = process.argv.slice(2).map(p => resolve(p));
 const config = readFileSync(join(fixture, 'supabase/config.toml'), 'utf8');
-assert.match(config, /^project_id = "veni_shared_release_1120"$/m);
+const project = /^project_id = "(veni_shared_release_1120(?:_[a-z0-9]+)?)"$/m.exec(config)?.[1];
+assert.ok(project, 'expected a disposable shared-release fixture');
 const cli = join(reserveCheckout, 'node_modules/supabase/dist/supabase.js');
 const { authorizeClient } = await import(pathToFileURL(join(reserveCheckout, 'local/onboarding-oauth.mjs')));
 const runCli = (...args) => execFileSync(process.execPath, [cli, ...args, '--workdir', fixture],
@@ -16,7 +17,7 @@ const runCli = (...args) => execFileSync(process.execPath, [cli, ...args, '--wor
 const state = JSON.parse(runCli('status', '-o', 'json'));
 const origin = 'http://127.0.0.1:57421';
 assert.equal(state.API_URL, origin);
-const sql = input => execFileSync('docker', ['exec', '-i', 'supabase_db_veni_shared_release_1120',
+const sql = input => execFileSync('docker', ['exec', '-i', 'supabase_db_' + project,
   'psql', '-XqAt', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres'], { input, encoding: 'utf8' }).trim();
 assert.equal(sql("select to_regnamespace('veni_account_entitlements') is null"), 't');
 const auth = (path, init = {}) => {
@@ -49,7 +50,11 @@ await website(user.access_token);
 const ledger = fileURLToPath(new URL('../../supabase/migrations/',import.meta.url));
 const pending = readdirSync(ledger).filter(name=>/^202611(19|20)\d{6}_.*\.sql$/.test(name)).sort();
 assert.equal(pending.length,5);
-for (const name of pending) copyFileSync(join(ledger,name),join(fixture,'supabase/migrations',name));
+for (const name of pending) {
+  const bytes = execFileSync('git', ['-C', ledger, 'show', 'HEAD:supabase/migrations/' + name]);
+  if (reviewedLedger) assert.deepEqual(bytes, readFileSync(join(reviewedLedger, name)), name);
+  writeFileSync(join(fixture, 'supabase/migrations', name), bytes, { flag: 'wx' });
+}
 runCli('migration','up','--local');
 await website(user.access_token);
 assert.deepEqual((await rpc('list_setup_tenants',{})).map(t=>t.id),[first]);
