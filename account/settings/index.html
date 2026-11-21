@@ -32,6 +32,22 @@
 </div>
 </dialog>
 </section>
+<template id="performance-connection-template">
+<section class="account-settings-card" id="performance-connection" aria-labelledby="performance-connection-title">
+<h2 id="performance-connection-title">Veni Performance</h2>
+<p role="status" tabindex="-1" data-connection-status>Loading connections…</p>
+<button class="btn btn-secondary" type="button" data-open-disconnection aria-haspopup="dialog" aria-controls="performance-disconnection" hidden>Disconnect Performance staging</button>
+<button class="btn btn-secondary" type="button" data-retry-connections hidden>Retry</button>
+<dialog id="performance-disconnection" closedby="any" aria-labelledby="performance-disconnection-title" aria-describedby="performance-disconnection-explanation">
+<h3 id="performance-disconnection-title">Disconnect Performance staging on all devices?</h3>
+<p id="performance-disconnection-explanation">This will disconnect Performance staging across your browsers and devices. Your Veni Account will remain signed in. Reconnecting Performance will require fresh consent.</p>
+<div class="actions">
+<button class="btn btn-secondary" type="button" data-cancel-disconnection autofocus>Cancel</button>
+<button class="btn btn-danger" type="button" data-confirm-disconnection disabled>Disconnect on all devices</button>
+</div>
+</dialog>
+</section>
+</template>
 <section class="account-settings-card"><span class="eyebrow">Your data</span><h2>What the shared account holds</h2><div class="account-data-summary"><div><strong>Shared identity</strong><span>Email and optional display name.</span></div><div><strong>Library</strong><span>Private digital-access entitlements.</span></div><div><strong>Not here</strong><span>Child profiles, BUZA learner data or payment-card details.</span></div></div><p style="margin-top:1rem">See the <a href="../../privacy/"><strong>Privacy Notice</strong></a> for the current beta data model.</p></section>
 <section class="account-settings-card account-danger"><span class="eyebrow">Danger zone</span><h2>Delete Veni Account</h2><p>Eligible accounts can permanently delete their sign-in, profile and library entitlements.</p><ul class="account-danger-list"><li>If you own a Reserve business, arrange an ownership transfer first. Accounts linked to Reserve records also require a retention review before deletion.</li><li>This cannot be undone.</li><li>It does not delete Veni Publishing’s public content.</li><li>Future legally required transaction records, if introduced, will need separate retention rules before commerce launches.</li></ul><div class="account-field"><label for="delete_confirmation">Type DELETE MY ACCOUNT to confirm</label><input id="delete_confirmation" data-delete-confirmation type="text" autocomplete="off"></div><button class="btn btn-danger" type="button" data-delete-account disabled>Delete my Veni Account</button></section>
 <button class="btn btn-secondary" type="button" data-sign-out>Sign out</button>

@@ -1,0 +1,33 @@
+project_id = "veni_shared_release_1120_exact"
+
+[api]
+port = 57421
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+port = 57422
+shadow_port = 57420
+major_version = 17
+
+[studio]
+enabled = false
+
+[inbucket]
+enabled = false
+
+[auth]
+site_url = "http://127.0.0.1:57430"
+additional_redirect_urls = []
+enable_signup = true
+
+[auth.email]
+enable_confirmations = false
+
+[auth.oauth_server]
+enabled = true
+authorization_url_path = "/account/authorize/"
+
+[auth.hook.custom_access_token]
+enabled = false
+uri = "pg-functions://postgres/veni_account_routing/access_token"

@@ -60,6 +60,11 @@ try {
   assert.equal(version.version, 'v2.198.0', 'Match the hosted OAuth logout behavior');
   const primary = await register('Isolated Reserve staging');
   const other = await register('Isolated control application');
+  assert.match(primary.client_id, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
+  // This empty loopback project uses its own confidential client and callback.
+  execFileSync('docker', ['exec', 'supabase_db_veni_disconnect_1118', 'psql', '-Xq',
+    '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-c',
+    `insert into reserve_internal.oauth_clients (client_id) values ('${primary.client_id}')`]);
   const vars = { SUPABASE_URL: provider, SUPABASE_PUBLISHABLE_KEY: state.PUBLISHABLE_KEY,
     VENI_ACCOUNT_MODE: 'shared', VENI_OAUTH_CLIENT_ID: primary.client_id,
     VENI_OAUTH_CLIENT_SECRET: primary.client_secret, VENI_OAUTH_COOKIE_KEY: randomBytes(32).toString('base64url') };
@@ -189,7 +194,7 @@ try {
   }
   await signInWebsite(page);
   const disconnect = page.getByRole('button', { name: 'Disconnect Reserve staging', exact: true });
-  const status = page.locator('[data-connection-status]');
+  const status = page.locator('#connected-applications [data-connection-status]');
   function controls(tab) {
     const dialog = tab.getByRole('dialog', { name: 'Disconnect Reserve staging on all devices?', exact: true });
     return {
@@ -263,7 +268,7 @@ try {
   try {
     await ui.confirm.dblclick();
     await Promise.race([successfulDelete.promise, delay(5000).then(() => { throw new Error('expected explicit DELETE'); })]);
-    assert.ok(await page.locator('[data-confirm-disconnection]').isDisabled());
+    assert.ok(await page.locator('#reserve-disconnection [data-confirm-disconnection]').isDisabled());
     assert.match(await status.innerText(), /Disconnecting/);
     // This tab explicitly confirms too, while the first request is in flight.
     await peerUI.confirm.click();
@@ -292,7 +297,7 @@ try {
   const activeControl = await auth('/rest/v1/rpc/reserve_current_reserve_user', {
     method: 'POST', headers: { ...json, ...bearer(control) }, body: '{}',
   });
-  assert.ok((await payload(activeControl, 'control app session lookup')) === websiteUser);
+  assert.equal(await payload(activeControl, 'control client Reserve identity'), null);
   await page.reload();
   await page.getByText('Reserve staging is disconnected.', { exact: true }).waitFor();
   assert.equal(await disconnect.isVisible(), false);

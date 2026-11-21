@@ -1,16 +1,26 @@
 export function initConnectedApplications(win, doc) {
-  const section = doc.getElementById("connected-applications");
+  initProduct(win, doc, doc.getElementById("connected-applications"), "reserve-staging", "Reserve staging", "#reserve-disconnection");
+  const clients = win.VENI_OAUTH_ALLOWED_CLIENTS ?? [];
+  if (clients.some(app => app.app === "performance-staging")) {
+    const template = doc.getElementById("performance-connection-template");
+    if (template) template.replaceWith(template.content.cloneNode(true));
+    initProduct(win, doc, doc.getElementById("performance-connection"), "performance-staging", "Performance staging", "#performance-disconnection");
+  }
+}
+
+function initProduct(win, doc, section, application, label, dialogSelector) {
   if (!section || section.dataset.connectionsInitialized) return;
   const status = section.querySelector("[data-connection-status]");
   const disconnect = section.querySelector("[data-open-disconnection]");
   const retry = section.querySelector("[data-retry-connections]");
-  const panel = section.querySelector("#reserve-disconnection");
+  const panel = section.querySelector(dialogSelector);
   const cancel = panel?.querySelector("[data-cancel-disconnection]");
   const confirm = panel?.querySelector("[data-confirm-disconnection]");
   const auth = win.veniAccount?.client?.auth;
-  const registrations = (win.VENI_OAUTH_ALLOWED_CLIENTS ?? []).filter(app => app.app === "reserve-staging");
+  const registrations = (win.VENI_OAUTH_ALLOWED_CLIENTS ?? []).filter(app => app.app === application);
   const clientId = registrations.length === 1 && registrations[0].clientId;
   if (!disconnect || !panel?.showModal || !cancel || !confirm || !auth?.oauth?.listGrants || !auth.oauth.revokeGrant ||
+      (win.VENI_OAUTH_ALLOWED_CLIENTS ?? []).filter(app => app.clientId === clientId).length !== 1 ||
       typeof clientId !== "string" || !/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(clientId)) {
     status.textContent = "Connected applications are temporarily unavailable. Reload this page to retry.";
     return;
@@ -27,7 +37,7 @@ export function initConnectedApplications(win, doc) {
     retry.hidden = !canRetry;
   }
 
-  async function hasReserveGrant() {
+  async function hasGrant() {
     const { data, error } = await auth.oauth.listGrants();
     if (error || !Array.isArray(data)) throw new Error();
     return data.some(grant => grant.client?.id === clientId);
@@ -37,9 +47,9 @@ export function initConnectedApplications(win, doc) {
     const current = ++generation;
     show("Checking your connections…");
     try {
-      const connected = await hasReserveGrant();
+      const connected = await hasGrant();
       if (current !== generation) return;
-      show(connected ? "Reserve staging is connected." : "Reserve staging is disconnected.", connected);
+      show(connected ? label + " is connected." : label + " is disconnected.", connected);
     } catch {
       if (current === generation) show("Could not check your connections.", false, true);
     }
@@ -62,28 +72,28 @@ export function initConnectedApplications(win, doc) {
     revoking = true;
     confirm.disabled = true;
     dismiss();
-    show("Disconnecting Reserve staging…");
+    show("Disconnecting " + label + "…");
     status.focus();
     async function revokeConfirmedGrant() {
       if (current !== generation) return;
       const identity = await auth.getUser();
       if (current !== generation) return;
       if (identity.error || identity.data.user?.id !== userId) throw new Error();
-      const connected = await hasReserveGrant();
+      const connected = await hasGrant();
       if (current !== generation) return;
       if (!connected) {
-        show("Reserve staging is disconnected.");
+        show(label + " is disconnected.");
         return;
       }
       const result = await auth.oauth.revokeGrant({ clientId });
       if (current !== generation) return;
       if (result.error !== null || !result.data) throw new Error();
-      show("Reserve staging disconnected on all devices.");
+      show(label + " disconnected on all devices.");
     }
     try {
       // Serialize explicit confirmations across tabs in the same browser profile.
       if (win.navigator.locks) {
-        await win.navigator.locks.request("veni-reserve-disconnect:" + clientId, revokeConfirmedGrant);
+        await win.navigator.locks.request("veni-" + application + "-disconnect:" + clientId, revokeConfirmedGrant);
       } else {
         await revokeConfirmedGrant();
       }

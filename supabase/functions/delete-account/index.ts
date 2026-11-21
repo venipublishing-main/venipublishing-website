@@ -52,6 +52,13 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  const { data: direct, error: sessionError } = await userClient.rpc("veni_account_is_direct_session");
+  if (sessionError || direct !== true) {
+    return new Response(JSON.stringify({ error: "Sign in directly to your Veni Account." }), {
+      status: 403, headers: { ...cors, "Content-Type": "application/json" }
+    });
+  }
+
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false }
   });

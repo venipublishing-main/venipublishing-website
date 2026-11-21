@@ -1,0 +1,70 @@
+name: Shared staging migration replay
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/shared-release-replay.yml'
+      - '.github/staging-review/**'
+      - 'supabase/migrations/**'
+      - 'scripts/prepare-shared-release.py'
+      - 'tests/integration/shared-release*'
+      - 'tests/integration/shared-release-stack/**'
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: website
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/venipublishing-website-preview
+          ref: ae1c4929ce8d8aaa954eacfe9b4494bfb2924301
+          path: arcana
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: venipublishing-main/veni-reserve
+          ref: 756e25a8919eae41964ece4e836388fa0dbd3a8a
+          path: reserve
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: reserve/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: pnpm --dir reserve install --frozen-lockfile
+      - name: Prepare the pinned ledger and start the historical loopback baseline
+        run: |
+          set -euo pipefail
+          stack="$RUNNER_TEMP/shared-release"
+          ledger="$RUNNER_TEMP/ledger"
+          python website/scripts/prepare-shared-release.py arcana "$ledger" --fresh-fixture
+          python - "$ledger" <<'PY'
+          import hashlib, json, pathlib, sys
+          ledger = pathlib.Path(sys.argv[1])
+          expected = json.loads(pathlib.Path('website/.github/staging-review/manifest.json').read_text())['sha256']
+          pins = {path.removeprefix('ledger/'): value for path, value in expected.items() if path.startswith('ledger/')}
+          pins['20260903070000_fixture_account_foundation.sql'] = 'a2726f9d5e14aa85576276161adbaba9119aab2f709a4788379d656dcf26bfa7'
+          assert {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in ledger.iterdir()} == pins
+          PY
+          mkdir -p "$stack/supabase/migrations" "$stack/supabase/.temp"
+          cp website/tests/integration/shared-release-stack/supabase/config.toml "$stack/supabase/config.toml"
+          cp "$ledger"/202609*.sql "$ledger"/20261117*.sql "$stack/supabase/migrations/"
+          echo v2.198.0 > "$stack/supabase/.temp/gotrue-version"
+          reserve/node_modules/.bin/supabase start --workdir "$stack" -x studio,postgres-meta,imgproxy,edge-runtime,logflare,vector > /dev/null
+      - name: Replay five forward migrations with live sessions and verify business decisions
+        run: |
+          set -euo pipefail
+          node website/tests/integration/shared-release-replay.mjs "$RUNNER_TEMP/shared-release" reserve "$RUNNER_TEMP/ledger"
+          diff -qr "$RUNNER_TEMP/ledger" "$RUNNER_TEMP/shared-release/supabase/migrations"
+          count=$(docker exec supabase_db_veni_shared_release_1120_exact psql -XqAt -U postgres -c 'select count(*) from supabase_migrations.schema_migrations')
+          test "$count" = 17
