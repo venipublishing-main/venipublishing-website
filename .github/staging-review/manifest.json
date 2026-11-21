@@ -1,0 +1,41 @@
+{
+  "project": "droslqfcazwkwvqlbtsq",
+  "website_application": "065a31be962533576a52016dc9ac8bee6535e375",
+  "website_review": "c42a9882241545a6feb99083449b94ead4bc5ee4",
+  "arcana_source": "ae1c4929ce8d8aaa954eacfe9b4494bfb2924301",
+  "reserve_source": "756e25a8919eae41964ece4e836388fa0dbd3a8a",
+  "performance_source": "e4f42b6ab6dd94effa94125ccb4e560d846991ca",
+  "forward_sql": [
+    "ledger/20261119075047_reserve_shared_onboarding.sql",
+    "ledger/20261119090000_performance_shared_foundation.sql",
+    "ledger/20261119091000_performance_role.sql",
+    "ledger/20261120024423_account_reserve_publish_decisions.sql",
+    "ledger/20261120025136_account_direct_session_boundaries.sql"
+  ],
+  "sha256": {
+    "ledger/20260903071048_revoke_handle_new_user_rpc_access.sql": "0ddf2b6f9c4326836ca8188df279a1da1719c81cd0e0e171e03908ae85de97b0",
+    "ledger/20260903072229_arcana_stage3_pilot_foundation.sql": "25fac0f67da74a4271638e051205d7a4e5b7e9902353d12b68bda4b15e79d285",
+    "ledger/20261117160650_reserve_shared_tenant_core.sql": "4d57e752399b2788390261fe362b182ad52e9b3ecb56676ab3c1eb0dd5a5467d",
+    "ledger/20261117160716_reserve_shared_roles_audit.sql": "656759bf01da57ed36200071169dc1779dbf0f8f794f9b776e6a5ecc9e39b923",
+    "ledger/20261117160729_reserve_shared_rls.sql": "d229b9c7b14461a56d4baff818b6e641511cd23f6a644bf692e738857b6e2911",
+    "ledger/20261117160741_reserve_shared_business_settings.sql": "f291dbfe9af09537b9e1e0abb899d24928a7461bc1d5ff01a6e6c7acfc44966c",
+    "ledger/20261117160759_reserve_shared_bootstrap.sql": "03e29ceed909abe89488b6e6a17fca212de608f087b5d77fe9326591b67a26e5",
+    "ledger/20261117160810_reserve_shared_private_theme.sql": "943a96c01c162a2fec845d6cfab02ebb52018794eba62a6d1185fa66c9e9e0c3",
+    "ledger/20261117160831_reserve_shared_locations.sql": "9b0cca47b54a5c3ace578420d5199f72d96e3e07e0233c89fad6ee1c756b966d",
+    "ledger/20261117160843_reserve_shared_services.sql": "e6b9d415b9589f98030fee9c7e5f92fcc82b986eae21e9e5b66793e013b910bc",
+    "ledger/20261117160855_reserve_shared_staff_eligibility.sql": "ed3c5d062b33b3a9cfee23d4a85381681b5d8d6f84e5daefef410b979439ba22",
+    "ledger/20261119075047_reserve_shared_onboarding.sql": "16d9974fdc25485ce0c0200e878835c0b672005d2d8e822593bfd2a23e61cba6",
+    "ledger/20261119090000_performance_shared_foundation.sql": "3d7c8f95a68a64f322f53acee786daf173c701942a0f1edd434b6fda2f6b8669",
+    "ledger/20261119091000_performance_role.sql": "b029981b7cac8cbf9771afafb589497a6648d8e8a059ead80d9566f99756fd63",
+    "ledger/20261120024423_account_reserve_publish_decisions.sql": "ab986dbe8c311c6ca194010684e00899a1b5863990a7cefbb2570b97c241c980",
+    "ledger/20261120025136_account_direct_session_boundaries.sql": "374be41ba46261443c0358a5cc2b33eecbb6f902054399a2a2987f7e83026a6b",
+    "performance-source.zip": "c8d78d153e2d8cb80d017befd838b3d99fcef4e296ebdcbc7527d3b701ff93e6",
+    "release-and-rollback.md": "577ba30b71288cbdf3f3597f61467a2402dc79848db958cd73902ed6ee6ccfdb",
+    "reserve-source.zip": "248818c25f29f808bccbb4c38451339a3db121047e6e73613fd01faf48da3c1a",
+    "website/account/settings/index.html": "9c1979b1deed8ed871cd4a85c1c25fd24262a76709c22a5edd1a47aa42819c09",
+    "website/assets/css/account-v2.css": "b023f90fd9fe00fb57c90297a9189c1a984dc603a44936df88e181703f9c53b7",
+    "website/assets/js/connected-applications.mjs": "999552594e394367a9759b72a1613b5a030ab24945d91d95728c25143739e844",
+    "website/assets/js/veni-oauth-clients.js": "46e562497013a058573a8f0dad4bbd0d2469e1dadfd5860e50b5a1cb73d9704a",
+    "website/supabase/functions/delete-account/index.ts": "6170c62281b431ff25f147eda01111af976912729d122a8c877bf228dc20a3b0"
+  }
+}
