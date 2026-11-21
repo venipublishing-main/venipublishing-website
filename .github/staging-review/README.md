@@ -1,6 +1,6 @@
 # Shared staging release decisions · 21 November 2026
 
-Ian accepted the disposable rehearsal at Website commit `c42a9882241545a6feb99083449b94ead4bc5ee4`. The review branch adds packaging only. Recovery housekeeping was verified complete on 21 November. The dated rehearsal report retains its original observations. [Release and rollback report](../../docs/architecture/shared-staging-readiness-20261120.md) · [Accepted package manifest](manifest.json)
+Ian accepted the disposable rehearsal at Website commit `c42a9882241545a6feb99083449b94ead4bc5ee4`. The review branch adds review artifacts and a loopback CI fixture update. The five migrations and application sources retain their accepted hashes. Recovery housekeeping was verified complete on 21 November. The dated rehearsal report retains its original observations. [Release and rollback report](../../docs/architecture/shared-staging-readiness-20261120.md) · [Accepted package manifest](manifest.json)
 
 ## Versions
 
